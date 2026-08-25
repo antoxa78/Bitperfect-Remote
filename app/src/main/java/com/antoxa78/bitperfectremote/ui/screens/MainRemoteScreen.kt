@@ -84,7 +84,7 @@ fun MainRemoteScreen(
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
-                        text = "Connected to ${viewModel.savedIp}",
+                        text = "Connected to ${viewModel.serverLabel}",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -267,7 +267,7 @@ fun MainRemoteScreen(
                                     modifier = Modifier.padding(horizontal = 4.dp)
                                 ) {
                                     Text(
-                                        text = "${viewModel.savedIp}:${viewModel.savedPort}",
+                                        text = viewModel.serverLabel,
                                         style = MaterialTheme.typography.labelSmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                                         textAlign = TextAlign.Center,

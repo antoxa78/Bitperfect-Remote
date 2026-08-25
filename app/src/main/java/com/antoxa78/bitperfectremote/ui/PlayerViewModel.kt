@@ -30,6 +30,10 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
     val savedIp: String get() = prefs.getString("saved_ip", "192.168.1.") ?: "192.168.1."
     val savedPort: String get() = prefs.getString("saved_port", "6600") ?: "6600"
     val savedPassword: String get() = prefs.getString("saved_password", "") ?: ""
+    val savedName: String get() = prefs.getString("saved_name", "") ?: ""
+
+    val serverLabel: String
+        get() = savedName.ifBlank { "$savedIp:$savedPort" }
 
     private var connHost = ""
     private var connPort = 6600
@@ -85,7 +89,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
     private var pollJob: Job? = null
     private var explicitDisconnect = false
 
-    fun connect(host: String, port: Int = 6600, password: String = "", remember: Boolean = true) {
+    fun connect(host: String, port: Int = 6600, password: String = "", remember: Boolean = true, name: String = "") {
         explicitDisconnect = false
         connHost = host
         connPort = port
@@ -95,6 +99,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
                 .putString("saved_ip", host)
                 .putString("saved_port", port.toString())
                 .putString("saved_password", password)
+                .putString("saved_name", name)
                 .apply()
         }
 

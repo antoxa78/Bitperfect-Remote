@@ -21,6 +21,7 @@ fun SettingsScreen(viewModel: PlayerViewModel, onBack: () -> Unit) {
     var ipAddress by remember { mutableStateOf(viewModel.savedIp) }
     var port by remember { mutableStateOf(viewModel.savedPort) }
     var password by remember { mutableStateOf(viewModel.savedPassword) }
+    var serverName by remember { mutableStateOf(viewModel.savedName) }
     var savedMessage by remember { mutableStateOf(false) }
 
     BackHandler { onBack() }
@@ -51,6 +52,17 @@ fun SettingsScreen(viewModel: PlayerViewModel, onBack: () -> Unit) {
                 color = MaterialTheme.colorScheme.primary
             )
             Spacer(modifier = Modifier.height(16.dp))
+
+            OutlinedTextField(
+                value = serverName,
+                onValueChange = { serverName = it; savedMessage = false },
+                label = { Text("Server Name (Optional)") },
+                placeholder = { Text("e.g. Living Room") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth()
+            )
+
+            Spacer(modifier = Modifier.height(12.dp))
 
             OutlinedTextField(
                 value = ipAddress,
@@ -98,7 +110,7 @@ fun SettingsScreen(viewModel: PlayerViewModel, onBack: () -> Unit) {
             Button(
                 onClick = {
                     val p = port.toIntOrNull() ?: 6600
-                    viewModel.connect(ipAddress.trim(), p, password, true)
+                    viewModel.connect(ipAddress.trim(), p, password, true, serverName.trim())
                     savedMessage = true
                 },
                 modifier = Modifier.fillMaxWidth().height(50.dp)
