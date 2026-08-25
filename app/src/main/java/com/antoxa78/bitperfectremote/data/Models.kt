@@ -1,4 +1,4 @@
-package com.example.bitperfectremote.data
+package com.antoxa78.bitperfectremote.data
 
 data class PlayerStatus(
     val state: String = "stop", // play, pause, stop

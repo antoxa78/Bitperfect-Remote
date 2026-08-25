@@ -1,4 +1,4 @@
-package com.example.bitperfectremote.ui
+package com.antoxa78.bitperfectremote.ui
 
 import android.app.Application
 import android.content.Context
@@ -7,11 +7,11 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
-import com.example.bitperfectremote.data.MpdClient
-import com.example.bitperfectremote.data.OnlineArtwork
-import com.example.bitperfectremote.data.PlayerStatus
-import com.example.bitperfectremote.data.QueueItem
-import com.example.bitperfectremote.data.TrackInfo
+import com.antoxa78.bitperfectremote.data.MpdClient
+import com.antoxa78.bitperfectremote.data.OnlineArtwork
+import com.antoxa78.bitperfectremote.data.PlayerStatus
+import com.antoxa78.bitperfectremote.data.QueueItem
+import com.antoxa78.bitperfectremote.data.TrackInfo
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow

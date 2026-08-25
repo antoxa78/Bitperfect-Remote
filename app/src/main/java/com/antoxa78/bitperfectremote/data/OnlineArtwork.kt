@@ -1,4 +1,4 @@
-package com.example.bitperfectremote.data
+package com.antoxa78.bitperfectremote.data
 
 import android.util.Log
 import java.net.HttpURLConnection

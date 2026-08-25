@@ -1,4 +1,4 @@
-package com.example.bitperfectremote
+package com.antoxa78.bitperfectremote
 
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -16,11 +16,11 @@ import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.example.bitperfectremote.ui.PlayerViewModel
-import com.example.bitperfectremote.ui.screens.ConnectionScreen
-import com.example.bitperfectremote.ui.screens.MainRemoteScreen
-import com.example.bitperfectremote.ui.screens.MusicBrowserScreen
-import com.example.bitperfectremote.ui.screens.SettingsScreen
+import com.antoxa78.bitperfectremote.ui.PlayerViewModel
+import com.antoxa78.bitperfectremote.ui.screens.ConnectionScreen
+import com.antoxa78.bitperfectremote.ui.screens.MainRemoteScreen
+import com.antoxa78.bitperfectremote.ui.screens.MusicBrowserScreen
+import com.antoxa78.bitperfectremote.ui.screens.SettingsScreen
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {

@@ -1,4 +1,4 @@
-package com.example.bitperfectremote.ui.screens
+package com.antoxa78.bitperfectremote.ui.screens
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -17,9 +17,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import com.example.bitperfectremote.data.BrowseEntry
-import com.example.bitperfectremote.data.MpdLibraryClient
-import com.example.bitperfectremote.ui.PlayerViewModel
+import com.antoxa78.bitperfectremote.data.BrowseEntry
+import com.antoxa78.bitperfectremote.data.MpdLibraryClient
+import com.antoxa78.bitperfectremote.ui.PlayerViewModel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 

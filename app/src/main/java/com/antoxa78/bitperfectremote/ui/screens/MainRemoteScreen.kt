@@ -1,4 +1,4 @@
-package com.example.bitperfectremote.ui.screens
+package com.antoxa78.bitperfectremote.ui.screens
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
@@ -32,11 +32,11 @@ import androidx.compose.ui.platform.LocalContext
 import java.util.Locale
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
-import com.example.bitperfectremote.BuildConfig
-import com.example.bitperfectremote.data.PlayerStatus
-import com.example.bitperfectremote.data.QueueItem
-import com.example.bitperfectremote.data.TrackInfo
-import com.example.bitperfectremote.ui.PlayerViewModel
+import com.antoxa78.bitperfectremote.BuildConfig
+import com.antoxa78.bitperfectremote.data.PlayerStatus
+import com.antoxa78.bitperfectremote.data.QueueItem
+import com.antoxa78.bitperfectremote.data.TrackInfo
+import com.antoxa78.bitperfectremote.ui.PlayerViewModel
 import kotlinx.coroutines.launch
 
 private val themeColors = listOf(

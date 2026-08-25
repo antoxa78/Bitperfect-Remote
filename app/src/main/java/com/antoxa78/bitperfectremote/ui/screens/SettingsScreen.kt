@@ -1,4 +1,4 @@
-package com.example.bitperfectremote.ui.screens
+package com.antoxa78.bitperfectremote.ui.screens
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.*
@@ -13,7 +13,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
-import com.example.bitperfectremote.ui.PlayerViewModel
+import com.antoxa78.bitperfectremote.ui.PlayerViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

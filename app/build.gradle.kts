@@ -12,11 +12,11 @@ val keystoreProps = Properties().apply {
 }
 
 android {
-    namespace = "com.example.bitperfectremote"
+    namespace = "com.antoxa78.bitperfectremote"
     compileSdk = 34
 
     defaultConfig {
-        applicationId = "com.example.bitperfectremote"
+        applicationId = "com.antoxa78.bitperfectremote"
         minSdk = 26
         targetSdk = 36
         versionCode = 3
