@@ -1,6 +1,6 @@
 # Bitperfect Remote
 
-A modern, fast, and feature-rich Android remote control for [Music Player Daemon (MPD)](https://www.musicpd.org/).
+A modern, fast, and feature-rich Android remote control for BitPerfect Player and [Music Player Daemon (MPD)](https://www.musicpd.org/).
 
 Built with **Kotlin** and **Jetpack Compose**.
 
