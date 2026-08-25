@@ -8,6 +8,7 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.bitperfectremote.data.MpdClient
+import com.example.bitperfectremote.data.OnlineArtwork
 import com.example.bitperfectremote.data.PlayerStatus
 import com.example.bitperfectremote.data.QueueItem
 import com.example.bitperfectremote.data.TrackInfo
@@ -66,6 +67,12 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
 
     private val _coverArt = MutableStateFlow<ByteArray?>(null)
     val coverArt: StateFlow<ByteArray?> = _coverArt.asStateFlow()
+
+    // For radio streams MPD can't provide artwork, so we resolve an image URL
+    // online from the current track's Artist/Title (see OnlineArtwork).
+    private val _coverArtUrl = MutableStateFlow<String?>(null)
+    val coverArtUrl: StateFlow<String?> = _coverArtUrl.asStateFlow()
+
     private var lastFetchedArtFile = ""
     private var artJob: Job? = null
 
@@ -164,15 +171,33 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
         if (file.isBlank() || key == lastFetchedArtFile) return
         lastFetchedArtFile = key
         _coverArt.value = null
+        _coverArtUrl.value = null
         artJob?.cancel()
         artJob = viewModelScope.launch {
             try {
-                if (!artClient.isConnected) {
-                    artClient.connect(connHost, connPort, connPassword)
-                }
-                val art = artClient.getAlbumArt(file)
-                if (key == lastFetchedArtFile) {
-                    _coverArt.value = art
+                if (file.startsWith("http://") || file.startsWith("https://")) {
+                    // Radio stream: resolve the playing track's album art online.
+                    var lookupArtist = artist
+                    var lookupTitle = title
+                    if (lookupArtist.isBlank() || lookupArtist == "Unknown Artist") {
+                        val dash = title.indexOf(" - ")
+                        if (dash > 0) {
+                            lookupArtist = title.substring(0, dash).trim()
+                            lookupTitle = title.substring(dash + 3).trim()
+                        }
+                    }
+                    val url = OnlineArtwork.resolveTrackArtwork(lookupArtist, lookupTitle)
+                    if (key == lastFetchedArtFile) {
+                        _coverArtUrl.value = url
+                    }
+                } else {
+                    if (!artClient.isConnected) {
+                        artClient.connect(connHost, connPort, connPassword)
+                    }
+                    val art = artClient.getAlbumArt(file)
+                    if (key == lastFetchedArtFile) {
+                        _coverArt.value = art
+                    }
                 }
             } catch (e: Exception) {
                 // Ignore artwork failures entirely - they must not trigger reconnects.

@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<lint>
+    <!-- The mipmap-anydpi-v26 folder is required for adaptive icons even though minSdk is 26.
+         Lint flags it as obsolete, but moving the XML out of -v26 breaks AAPT. -->
+    <issue id="ObsoleteSdkInt">
+        <ignore path="res/mipmap-anydpi-v26" />
+    </issue>
+
+    <!-- AGP 9.x is not a real/public stable release. The reported "9.3.2" does not exist. -->
+    <issue id="AndroidGradlePluginVersion" severity="ignore" />
+
+    <!-- Lint's dependency database suggests preview/future versions (e.g. Compose BOM 2026.08.00)
+         that are not available. Suppress informational update nudges; versions are managed manually. -->
+    <issue id="GradleDependency" severity="ignore" />
+</lint>

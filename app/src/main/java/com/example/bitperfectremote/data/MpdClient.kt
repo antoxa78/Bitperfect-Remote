@@ -127,17 +127,10 @@ class MpdClient {
             val bis = inputStream ?: return@withContext null
 
             try {
-                // MPD binary response format:
-                //   size: <n>
-                //   binary: <n>
-                //   <n raw bytes>
-                //   OK
                 // Attempt albumart first, then fall back to readpicture.
-                w.println("albumart \"$uri\" 0")
-                var result = readBinaryResponse(bis)
+                var result = readBinaryFull(w, bis, "albumart", uri)
                 if (result == null) {
-                    w.println("readpicture \"$uri\" 0")
-                    result = readBinaryResponse(bis)
+                    result = readBinaryFull(w, bis, "readpicture", uri)
                 }
                 return@withContext result
             } catch (e: Exception) {
@@ -147,24 +140,56 @@ class MpdClient {
         }
     }
 
-    private fun readBinaryResponse(bis: BufferedInputStream): ByteArray? {
-        var binarySize = -1
+    // MPD's albumart/readpicture are paginated: each reply reports the *total* file
+    // size ("size: <n>") separately from the size of just this chunk ("binary: <n>",
+    // capped at MPD's binary_limit, default 8192 bytes). We must keep requesting
+    // increasing offsets until we've collected the full "size" worth of bytes.
+    private fun readBinaryFull(w: PrintWriter, bis: BufferedInputStream, command: String, uri: String): ByteArray? {
+        var offset = 0
+        var totalSize = -1
+        var out: ByteArrayOutputStream? = null
+
+        while (true) {
+            w.println("$command \"$uri\" $offset")
+            val chunk = readBinaryChunk(bis) ?: return if (offset == 0) null else out?.toByteArray()
+
+            if (totalSize == -1) {
+                totalSize = chunk.totalSize
+                if (totalSize <= 0) return null
+                out = ByteArrayOutputStream(totalSize)
+            }
+            out?.write(chunk.data)
+            offset += chunk.data.size
+
+            if (chunk.data.isEmpty() || offset >= totalSize) break
+        }
+        return out?.toByteArray()
+    }
+
+    private data class BinaryChunk(val totalSize: Int, val data: ByteArray)
+
+    private fun readBinaryChunk(bis: BufferedInputStream): BinaryChunk? {
+        var totalSize = -1
+        var chunkSize = -1
         while (true) {
             val line = readLine(bis)
-            if (line == "OK") break
+            if (line == "OK") return null
             if (line.startsWith("ACK")) return null
-            if (line.startsWith("size: ")) continue
+            if (line.startsWith("size: ")) {
+                totalSize = line.substringAfter("size: ").trim().toIntOrNull() ?: -1
+                continue
+            }
             if (line.startsWith("binary: ")) {
-                binarySize = line.substringAfter("binary: ").trim().toIntOrNull() ?: -1
+                chunkSize = line.substringAfter("binary: ").trim().toIntOrNull() ?: -1
                 break // raw binary data follows immediately after this line
             }
         }
-        if (binarySize <= 0) return null
+        if (chunkSize < 0) return null
 
-        val buffer = ByteArray(binarySize)
+        val buffer = ByteArray(chunkSize)
         var totalRead = 0
-        while (totalRead < binarySize) {
-            val read = bis.read(buffer, totalRead, binarySize - totalRead)
+        while (totalRead < chunkSize) {
+            val read = bis.read(buffer, totalRead, chunkSize - totalRead)
             if (read == -1) break
             totalRead += read
         }
@@ -174,7 +199,7 @@ class MpdClient {
             val line = readLine(bis)
             if (line == "OK" || line.startsWith("ACK")) break
         }
-        return buffer
+        return BinaryChunk(totalSize, buffer)
     }
 
     suspend fun getStatus(): PlayerStatus = withContext(Dispatchers.IO) {

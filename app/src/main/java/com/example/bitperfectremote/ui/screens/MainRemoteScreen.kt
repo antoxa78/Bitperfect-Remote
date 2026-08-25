@@ -3,9 +3,8 @@ package com.example.bitperfectremote.ui.screens
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
-import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -30,6 +29,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import java.util.Locale
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.example.bitperfectremote.BuildConfig
@@ -234,74 +234,73 @@ fun MainRemoteScreen(
             }
         }
     ) {
+        val fileInfo = buildAudioInfo(status)
+        val showIp = viewModel.savedIp.isNotBlank() && viewModel.savedIp != "192.168.1."
+
         Scaffold(
             topBar = {
-                CenterAlignedTopAppBar(
-                    title = {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text(
-                                "Bitperfect Remote", 
-                                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
-                            )
-                            if (viewModel.savedIp.isNotBlank() && viewModel.savedIp != "192.168.1.") {
-                                Spacer(modifier = Modifier.height(4.dp))
-                                Text(
-                                    text = "${viewModel.savedIp}:${viewModel.savedPort}",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.primary
-                                )
-                            }
-                        }
-                    },
-                    navigationIcon = {
+                Column(
+                    modifier = Modifier
+                        .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.95f))
+                        .windowInsetsPadding(WindowInsets.statusBars)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(top = 16.dp, bottom = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
                         IconButton(onClick = { scope.launch { drawerState.open() } }) {
                             Icon(Icons.Default.Menu, contentDescription = "Open Menu")
                         }
-                    },
-                    colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
-                        containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.95f)
-                    )
-                )
+                        Column(
+                            modifier = Modifier.weight(1f).padding(end = 8.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Text(
+                                "Bitperfect Remote",
+                                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
+                            )
+                            if (showIp) {
+                                Spacer(modifier = Modifier.height(6.dp))
+                                Surface(
+                                    shape = RoundedCornerShape(12.dp),
+                                    color = MaterialTheme.colorScheme.surfaceVariant,
+                                    modifier = Modifier.padding(horizontal = 4.dp)
+                                ) {
+                                    Text(
+                                        text = "${viewModel.savedIp}:${viewModel.savedPort}",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        textAlign = TextAlign.Center,
+                                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 5.dp)
+                                    )
+                                }
+                            }
+                        }
+                        // Balance the leading 48dp menu button so the title stays centered.
+                        Spacer(modifier = Modifier.width(48.dp))
+                    }
+                    Divider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                }
             },
             bottomBar = {
                 NavigationBar(
                     containerColor = MaterialTheme.colorScheme.surface
                 ) {
-                    val selIcon = MaterialTheme.colorScheme.onPrimary
-                    val selText = MaterialTheme.colorScheme.onSurface
-                    val indicator = MaterialTheme.colorScheme.primary
-                    val unsel = MaterialTheme.colorScheme.onSurfaceVariant
                     NavigationBarItem(
                         icon = { Icon(if (selectedTab == 0) Icons.Default.PlayCircleFilled else Icons.Default.PlayCircleOutline, contentDescription = "Player") },
-                        label = { Text("Player", color = if (selectedTab == 0) selText else unsel) },
+                        label = { Text("Player") },
                         selected = selectedTab == 0,
-                        onClick = { selectedTab = 0 },
-                        alwaysShowLabel = true,
-                        colors = NavigationBarItemDefaults.colors(
-                            selectedIconColor = selIcon,
-                            selectedTextColor = selText,
-                            indicatorColor = indicator,
-                            unselectedIconColor = unsel,
-                            unselectedTextColor = unsel
-                        )
+                        onClick = { selectedTab = 0 }
                     )
                     NavigationBarItem(
                         icon = { Icon(if (selectedTab == 1) Icons.Default.QueueMusic else Icons.Default.List, contentDescription = "Queue") },
-                        label = { Text("Queue", color = if (selectedTab == 1) selText else unsel) },
+                        label = { Text("Queue") },
                         selected = selectedTab == 1,
-                        onClick = { selectedTab = 1 },
-                        alwaysShowLabel = true,
-                        colors = NavigationBarItemDefaults.colors(
-                            selectedIconColor = selIcon,
-                            selectedTextColor = selText,
-                            indicatorColor = indicator,
-                            unselectedIconColor = unsel,
-                            unselectedTextColor = unsel
-                        )
+                        onClick = { selectedTab = 1 }
                     )
                 }
             }
-        ) { paddingValues ->
+            ) { paddingValues ->
             Box(
                 modifier = Modifier
                     .padding(paddingValues)
@@ -319,9 +318,37 @@ fun MainRemoteScreen(
                 // so it never resizes the Now Playing layout (which would clip the
                 // title under the album art).
                 Box(modifier = Modifier.fillMaxSize()) {
-                    when (selectedTab) {
-                        0 -> NowPlayingTab(viewModel, status, currentSong)
-                        1 -> QueueTab(viewModel, playlist, status.songId)
+                    Column(modifier = Modifier.fillMaxSize()) {
+                        if (fileInfo.isNotBlank()) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(top = 8.dp, bottom = 2.dp),
+                                horizontalArrangement = Arrangement.Center,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Surface(
+                                    shape = RoundedCornerShape(12.dp),
+                                    color = MaterialTheme.colorScheme.surfaceVariant
+                                ) {
+                                    Text(
+                                        text = fileInfo,
+                                        style = MaterialTheme.typography.labelMedium.copy(
+                                            fontSize = 13.sp
+                                        ),
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        textAlign = TextAlign.Center,
+                                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 5.dp)
+                                    )
+                                }
+                            }
+                        }
+                        Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
+                            when (selectedTab) {
+                                0 -> NowPlayingTab(viewModel, status, currentSong)
+                                1 -> QueueTab(viewModel, playlist, status.songId)
+                            }
+                        }
                     }
                 }
 
@@ -329,23 +356,26 @@ fun MainRemoteScreen(
                     visible = errorMessage != null,
                     enter = fadeIn(),
                     exit = fadeOut(),
-                    modifier = Modifier.align(Alignment.TopCenter)
+                    modifier = Modifier
+                        .align(Alignment.TopCenter)
+                        .padding(top = 8.dp)
                 ) {
                     Surface(
-                        color = Color.Transparent,
-                        modifier = Modifier.fillMaxWidth(),
-                        tonalElevation = 0.dp
+                        color = MaterialTheme.colorScheme.errorContainer,
+                        shape = RoundedCornerShape(12.dp),
+                        shadowElevation = 4.dp,
+                        modifier = Modifier.padding(horizontal = 16.dp)
                     ) {
                         Row(
-                            modifier = Modifier.padding(12.dp).fillMaxWidth(),
+                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.Center
                         ) {
-                            Icon(Icons.Default.Warning, contentDescription = null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(18.dp))
+                            Icon(Icons.Default.Warning, contentDescription = null, tint = MaterialTheme.colorScheme.onErrorContainer, modifier = Modifier.size(18.dp))
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(
                                 text = errorMessage ?: "",
-                                color = MaterialTheme.colorScheme.error,
+                                color = MaterialTheme.colorScheme.onErrorContainer,
                                 style = MaterialTheme.typography.bodySmall,
                                 fontWeight = FontWeight.Medium
                             )
@@ -357,10 +387,10 @@ fun MainRemoteScreen(
     }
 }
 
-@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun NowPlayingTab(viewModel: PlayerViewModel, status: PlayerStatus, song: TrackInfo) {
     val coverArt by viewModel.coverArt.collectAsState()
+    val coverArtUrl by viewModel.coverArtUrl.collectAsState()
 
     Column(
         modifier = Modifier
@@ -368,116 +398,116 @@ fun NowPlayingTab(viewModel: PlayerViewModel, status: PlayerStatus, song: TrackI
             .padding(horizontal = 32.dp, vertical = 24.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        // Flexible top area: absorbs song-info height changes between tracks so
-        // the bottom controls stay fixed and never shift/resize on track switch.
+        // Flexible top area: artwork fills the available space, song info is pinned at the bottom
+        // so it never gets pushed off-screen when the cover art loads.
         Column(
             modifier = Modifier.weight(1f).fillMaxWidth(),
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center
+            verticalArrangement = Arrangement.SpaceBetween
         ) {
-        // Artwork
-        Card(
-            modifier = Modifier
-                .aspectRatio(1f)
-                .fillMaxWidth(0.62f)
-                .padding(8.dp),
-            shape = RoundedCornerShape(24.dp),
-            elevation = CardDefaults.cardElevation(defaultElevation = 12.dp)
-        ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(
-                        Brush.linearGradient(
-                            listOf(
-                                MaterialTheme.colorScheme.primaryContainer,
-                                MaterialTheme.colorScheme.secondaryContainer
-                            )
-                        )
-                    ),
+            BoxWithConstraints(
+                modifier = Modifier.weight(1f).fillMaxWidth(),
                 contentAlignment = Alignment.Center
             ) {
-                if (coverArt != null) {
-                    AsyncImage(
-                        model = ImageRequest.Builder(LocalContext.current)
-                            .data(coverArt)
-                            .crossfade(true)
-                            .build(),
-                        contentDescription = "Album Art",
-                        modifier = Modifier.fillMaxSize(),
-                        contentScale = ContentScale.Crop
+                val artSize = (maxWidth * 0.58f).coerceAtMost(maxHeight)
+                Card(
+                    modifier = Modifier
+                        .size(artSize)
+                        .padding(6.dp),
+                    shape = RoundedCornerShape(28.dp),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 16.dp),
+                    border = BorderStroke(
+                        1.dp,
+                        MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)
                     )
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(
+                                Brush.linearGradient(
+                                    listOf(
+                                        MaterialTheme.colorScheme.primaryContainer,
+                                        MaterialTheme.colorScheme.secondaryContainer
+                                    )
+                                )
+                            ),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        if (coverArtUrl != null) {
+                            AsyncImage(
+                                model = ImageRequest.Builder(LocalContext.current)
+                                    .data(coverArtUrl)
+                                    .crossfade(true)
+                                    .build(),
+                                contentDescription = "Album Art",
+                                modifier = Modifier.fillMaxSize(),
+                                contentScale = ContentScale.Crop
+                            )
+                        } else if (coverArt != null) {
+                            AsyncImage(
+                                model = ImageRequest.Builder(LocalContext.current)
+                                    .data(coverArt)
+                                    .crossfade(true)
+                                    .build(),
+                                contentDescription = "Album Art",
+                                modifier = Modifier.fillMaxSize(),
+                                contentScale = ContentScale.Crop
+                            )
                 } else {
                     Icon(
                         Icons.Default.MusicNote,
                         contentDescription = null,
-                        modifier = Modifier.size(100.dp),
-                        tint = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.6f)
+                        modifier = Modifier.fillMaxSize(0.45f),
+                        tint = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.45f)
+                    )
+                }
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // Song Info (pinned at the bottom of the flexible area)
+            Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
+                Text(
+                    text = if (song.title.isBlank()) "No Media Playing" else song.title,
+                    style = MaterialTheme.typography.headlineSmall.copy(
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 0.5.sp
+                    ),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = if (song.artist.isBlank()) "Bitperfect MPD" else song.artist,
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.primary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                if (song.album.isNotBlank()) {
+                    Text(
+                        text = song.album,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.padding(top = 2.dp)
                     )
                 }
             }
-        }
-
-        // Song Info
-        Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
-            Text(
-                text = if (song.title.isBlank()) "No Media Playing" else song.title,
-                style = MaterialTheme.typography.headlineSmall.copy(
-                    fontWeight = FontWeight.Bold,
-                    letterSpacing = 0.5.sp
-                ),
-                maxLines = 1,
-                textAlign = TextAlign.Center,
-                modifier = Modifier.basicMarquee()
-            )
-            Spacer(modifier = Modifier.height(4.dp))
-            Text(
-                text = if (song.artist.isBlank()) "Bitperfect MPD" else song.artist,
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.primary,
-                maxLines = 1,
-                textAlign = TextAlign.Center,
-                modifier = Modifier.basicMarquee()
-            )
-            if (song.album.isNotBlank()) {
-                Text(
-                    text = song.album,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-                    maxLines = 1,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.padding(top = 2.dp)
-                )
-            }
-
-            }
         } // end flexible top area
-
-        // File info: bit depth / sample rate / channels / bitrate (pinned, always visible)
-        val fileInfo = buildAudioInfo(status)
-        if (fileInfo.isNotBlank()) {
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.Center
-            ) {
-                Icon(
-                    Icons.Default.Analytics,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(16.dp)
-                )
-                Spacer(modifier = Modifier.width(6.dp))
-                Text(
-                    text = fileInfo,
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.primary
-                )
-            }
-        }
 
         // Progress
         Column(modifier = Modifier.fillMaxWidth()) {
+            val isRadio = song.file.startsWith("http://") || song.file.startsWith("https://")
             val progress = if (song.duration > 0f) (status.elapsed / song.duration).coerceIn(0f, 1f) else 0f
             Slider(
                 value = progress,
@@ -488,11 +518,22 @@ fun NowPlayingTab(viewModel: PlayerViewModel, status: PlayerStatus, song: TrackI
                 modifier = Modifier.fillMaxWidth()
             )
             Row(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp),
+                modifier = Modifier.fillMaxWidth().padding(start = 4.dp, end = 4.dp, top = 4.dp),
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 Text(formatTime(status.elapsed), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Text(formatTime(song.duration), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                if (isRadio) {
+                    Text(
+                        text = "\u221E",
+                        style = MaterialTheme.typography.labelMedium.copy(
+                            fontSize = 18.sp,
+                            fontWeight = FontWeight.Bold
+                        ),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                } else {
+                    Text(formatTime(song.duration), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
             }
         }
 
@@ -586,7 +627,7 @@ fun QueueTab(viewModel: PlayerViewModel, playlist: List<QueueItem>, currentSongI
                 Card(
                     onClick = { viewModel.playId(item.id) },
                     colors = CardDefaults.cardColors(
-                        containerColor = if (isCurrent) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface
+                        containerColor = if (isCurrent) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant
                     ),
                     elevation = CardDefaults.cardElevation(defaultElevation = if (isCurrent) 4.dp else 1.dp),
                     shape = RoundedCornerShape(16.dp),
@@ -599,7 +640,8 @@ fun QueueTab(viewModel: PlayerViewModel, playlist: List<QueueItem>, currentSongI
                         Surface(
                             modifier = Modifier.size(40.dp),
                             shape = RoundedCornerShape(8.dp),
-                            color = if (isCurrent) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant
+                            color = if (isCurrent) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.secondaryContainer,
+                            contentColor = if (isCurrent) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSecondaryContainer
                         ) {
                             Box(contentAlignment = Alignment.Center) {
                                 if (isCurrent) {
@@ -642,7 +684,7 @@ private fun formatTime(seconds: Float): String {
     val totalSecs = seconds.toInt()
     val mins = totalSecs / 60
     val secs = totalSecs % 60
-    return String.format("%d:%02d", mins, secs)
+    return String.format(Locale.ROOT, "%d:%02d", mins, secs)
 }
 
 private fun buildAudioInfo(status: PlayerStatus): String {

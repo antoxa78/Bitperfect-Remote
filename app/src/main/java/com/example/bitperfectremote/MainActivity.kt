@@ -59,26 +59,32 @@ class MainActivity : ComponentActivity() {
                 }
             }
 
+            val accent = accentColor(viewModel.themeColor)
+            val baseScheme = if (isDarkTheme) darkColorScheme() else lightColorScheme()
+            val surfaceTint = 0.06f
+            val surfaceVariantTint = 0.14f
+            val secondaryContainerTint = 0.18f
+            val primaryContainerTint = if (isDarkTheme) 0.28f else 0.18f
+
             MaterialTheme(
-                colorScheme = if (isDarkTheme) {
-                    val a = accentColor(viewModel.themeColor)
-                    darkColorScheme(
-                        primary = a,
-                        primaryContainer = a.copy(alpha = 0.28f),
-                        onPrimaryContainer = a.copy(alpha = 0.95f),
-                        secondaryContainer = a.copy(alpha = 0.18f),
-                        onSecondaryContainer = a.copy(alpha = 0.9f)
-                    )
-                } else {
-                    val a = accentColor(viewModel.themeColor)
-                    lightColorScheme(
-                        primary = a,
-                        primaryContainer = a.copy(alpha = 0.16f),
-                        onPrimaryContainer = a.copy(alpha = 0.95f),
-                        secondaryContainer = a.copy(alpha = 0.10f),
-                        onSecondaryContainer = a.copy(alpha = 0.9f)
-                    )
-                }
+                colorScheme = baseScheme.copy(
+                    primary = accent,
+                    onPrimary = if (accent.luminance() > 0.5f) Color.Black else Color.White,
+                    primaryContainer = accent.copy(alpha = primaryContainerTint),
+                    onPrimaryContainer = accent.copy(alpha = 0.95f),
+                    secondary = accent,
+                    onSecondary = if (accent.luminance() > 0.5f) Color.Black else Color.White,
+                    secondaryContainer = accent.copy(alpha = secondaryContainerTint),
+                    onSecondaryContainer = accent.copy(alpha = 0.9f),
+                    surface = baseScheme.surface.blendWith(accent, surfaceTint),
+                    onSurface = baseScheme.onSurface,
+                    surfaceVariant = baseScheme.surfaceVariant.blendWith(accent, surfaceVariantTint),
+                    onSurfaceVariant = baseScheme.onSurfaceVariant.blendWith(accent, 0.35f),
+                    background = baseScheme.background.blendWith(accent, surfaceTint),
+                    onBackground = baseScheme.onBackground,
+                    outline = accent.copy(alpha = 0.4f),
+                    outlineVariant = accent.copy(alpha = 0.2f)
+                )
             ) {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
@@ -134,6 +140,20 @@ class MainActivity : ComponentActivity() {
             }
         }
     }
+}
+
+private fun Color.luminance(): Float {
+    return 0.2126f * red + 0.7152f * green + 0.0722f * blue
+}
+
+private fun Color.blendWith(other: Color, ratio: Float): Color {
+    val r = ratio.coerceIn(0f, 1f)
+    return Color(
+        red = red * (1 - r) + other.red * r,
+        green = green * (1 - r) + other.green * r,
+        blue = blue * (1 - r) + other.blue * r,
+        alpha = alpha * (1 - r) + other.alpha * r
+    )
 }
 
 // Accent color palette selectable from the Application Themes menu.
