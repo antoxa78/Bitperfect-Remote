@@ -31,6 +31,7 @@ fun ConnectionScreen(viewModel: PlayerViewModel, onConnected: () -> Unit) {
     var ipAddress by remember { mutableStateOf(viewModel.savedIp) }
     var port by remember { mutableStateOf(viewModel.savedPort) }
     var password by remember { mutableStateOf(viewModel.savedPassword) }
+    var serverName by remember { mutableStateOf(viewModel.savedName) }
     var rememberMe by remember { mutableStateOf(true) }
     var passwordVisible by remember { mutableStateOf(false) }
 
@@ -110,6 +111,19 @@ fun ConnectionScreen(viewModel: PlayerViewModel, onConnected: () -> Unit) {
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     OutlinedTextField(
+                        value = serverName,
+                        onValueChange = { serverName = it },
+                        label = { Text("Server Name (Optional)") },
+                        placeholder = { Text("e.g. Living Room") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp),
+                        leadingIcon = { Icon(Icons.Default.Storage, contentDescription = null) }
+                    )
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    OutlinedTextField(
                         value = ipAddress,
                         onValueChange = { ipAddress = it },
                         label = { Text("Server IP Address") },
@@ -177,7 +191,7 @@ fun ConnectionScreen(viewModel: PlayerViewModel, onConnected: () -> Unit) {
                     Button(
                         onClick = {
                             val p = port.toIntOrNull() ?: 6600
-                            viewModel.connect(ipAddress.trim(), p, password, rememberMe)
+                            viewModel.connect(ipAddress.trim(), p, password, rememberMe, serverName.trim())
                         },
                         enabled = !isConnecting && ipAddress.isNotBlank(),
                         modifier = Modifier

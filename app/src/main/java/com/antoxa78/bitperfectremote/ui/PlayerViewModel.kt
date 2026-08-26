@@ -89,18 +89,20 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
     private var pollJob: Job? = null
     private var explicitDisconnect = false
 
-    fun connect(host: String, port: Int = 6600, password: String = "", remember: Boolean = true, name: String = "") {
+    fun connect(host: String, port: Int = 6600, password: String = "", remember: Boolean = true, name: String? = null) {
         explicitDisconnect = false
         connHost = host
         connPort = port
         connPassword = password
         if (remember) {
-            prefs.edit()
+            val editor = prefs.edit()
                 .putString("saved_ip", host)
                 .putString("saved_port", port.toString())
                 .putString("saved_password", password)
-                .putString("saved_name", name)
-                .apply()
+            if (name != null) {
+                editor.putString("saved_name", name)
+            }
+            editor.apply()
         }
 
         viewModelScope.launch {
