@@ -80,8 +80,16 @@ class MpdClient {
 
     fun disconnect() {
         try {
+            writer?.close()
+            inputStream?.close()
             socket?.close()
-        } catch (e: Exception) {}
+        } catch (e: Exception) {
+            // ignore — we're tearing down
+        } finally {
+            writer = null
+            inputStream = null
+            socket = null
+        }
     }
 
     private fun disconnectInternal() {
@@ -99,7 +107,9 @@ class MpdClient {
     }
 
     val isConnected: Boolean
-        get() = socket != null && socket!!.isConnected && !socket!!.isClosed
+        // Capture a local reference to avoid a race where another thread nulls out
+        // `socket` between the null check and the dereference.
+        get() = socket?.let { !it.isClosed && it.isConnected } ?: false
 
     suspend fun sendCommand(command: String): List<String> = withContext(Dispatchers.IO) {
         mutex.withLock {

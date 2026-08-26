@@ -81,7 +81,9 @@ object OnlineArtwork {
             if (c == '\\' && i + 1 < json.length) {
                 when (val n = json[i + 1]) {
                     'u' -> {
-                        if (i + 6 < json.length) {
+                        // substring(i+2, i+6) needs indices i+2..i+5, so i+5 must be valid,
+                        // i.e. i+6 <= json.length (the original i+6 < json.length was off by one).
+                        if (i + 6 <= json.length) {
                             val hex = json.substring(i + 2, i + 6).toIntOrNull(16)
                             sb.append(hex?.toChar() ?: '?')
                         }

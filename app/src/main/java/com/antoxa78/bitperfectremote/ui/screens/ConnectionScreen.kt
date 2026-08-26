@@ -211,16 +211,6 @@ fun ConnectionScreen(viewModel: PlayerViewModel, onConnected: () -> Unit) {
                             Icon(Icons.Default.ArrowForward, contentDescription = null)
                         }
                     }
-
-                    if (errorMessage != null) {
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text(
-                            text = errorMessage ?: "",
-                            color = MaterialTheme.colorScheme.error,
-                            style = MaterialTheme.typography.bodySmall,
-                            textAlign = TextAlign.Center
-                        )
-                    }
                 }
             }
         }

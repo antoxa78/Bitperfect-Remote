@@ -13,14 +13,14 @@ val keystoreProps = Properties().apply {
 
 android {
     namespace = "com.antoxa78.bitperfectremote"
-    compileSdk = 34
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "com.antoxa78.bitperfectremote"
         minSdk = 26
         targetSdk = 36
-        versionCode = 4
-        versionName = "1.3"
+        versionCode = 5
+        versionName = "1.4"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -29,18 +29,23 @@ android {
     }
 
     signingConfigs {
-        create("release") {
-            storeFile = file(keystoreProps.getProperty("storeFile", ""))
-            storePassword = keystoreProps.getProperty("storePassword", "")
-            keyAlias = keystoreProps.getProperty("keyAlias", "")
-            keyPassword = keystoreProps.getProperty("keyPassword", "")
+        val storeFilePath = keystoreProps.getProperty("storeFile", "")
+        if (storeFilePath.isNotEmpty()) {
+            create("release") {
+                storeFile = file(storeFilePath)
+                storePassword = keystoreProps.getProperty("storePassword", "")
+                keyAlias = keystoreProps.getProperty("keyAlias", "")
+                keyPassword = keystoreProps.getProperty("keyPassword", "")
+            }
         }
     }
 
     buildTypes {
         release {
-            isMinifyEnabled = false
-            signingConfig = signingConfigs.getByName("release")
+            isMinifyEnabled = true
+            isShrinkResources = true
+            signingConfig = signingConfigs.findByName("release")
+                ?: signingConfigs.getByName("debug")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
@@ -82,6 +87,7 @@ dependencies {
     implementation(libs.androidx.navigation.compose)
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.coil.compose)
+    implementation("androidx.security:security-crypto:1.0.0")
 
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)

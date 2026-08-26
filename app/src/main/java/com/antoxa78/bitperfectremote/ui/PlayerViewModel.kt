@@ -7,7 +7,10 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import androidx.security.crypto.EncryptedSharedPreferences
+import androidx.security.crypto.MasterKeys
 import com.antoxa78.bitperfectremote.data.MpdClient
+import com.antoxa78.bitperfectremote.data.MpdLibraryClient
 import com.antoxa78.bitperfectremote.data.OnlineArtwork
 import com.antoxa78.bitperfectremote.data.PlayerStatus
 import com.antoxa78.bitperfectremote.data.QueueItem
@@ -25,7 +28,27 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
     // request (e.g. online lookup on the server) never blocks status polling
     // or triggers a reconnection.
     private val artClient = MpdClient()
-    private val prefs = application.getSharedPreferences("BitperfectRemotePrefs", Context.MODE_PRIVATE)
+    // Separate connection used only for the music browser, so directory listings
+    // don't compete with the polling mutex on the main client.
+    private val browserClient = MpdClient()
+    val libraryClient = MpdLibraryClient(browserClient)
+
+    private val prefs = run {
+        try {
+            val masterKeyAlias = MasterKeys.getOrCreate(MasterKeys.AES256_GCM_SPEC)
+            EncryptedSharedPreferences.create(
+                "BitperfectRemotePrefs",
+                masterKeyAlias,
+                application,
+                EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
+                EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
+            )
+        } catch (e: Exception) {
+            // Fall back to plain prefs if encrypted store is unavailable (e.g. emulator
+            // without hardware-backed keystore), rather than crashing on startup.
+            application.getSharedPreferences("BitperfectRemotePrefs", Context.MODE_PRIVATE)
+        }
+    }
 
     val savedIp: String get() = prefs.getString("saved_ip", "192.168.1.") ?: "192.168.1."
     val savedPort: String get() = prefs.getString("saved_port", "6600") ?: "6600"
@@ -126,8 +149,16 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
         artJob?.cancel()
         client.disconnect()
         artClient.disconnect()
+        browserClient.disconnect()
         _isConnected.value = false
         _errorMessage.value = null
+    }
+
+    /** Ensures the dedicated browser connection is open before a lsinfo call. */
+    suspend fun ensureBrowserConnected() {
+        if (!browserClient.isConnected && connHost.isNotBlank()) {
+            browserClient.connect(connHost, connPort, connPassword)
+        }
     }
 
     private fun startPolling(host: String, port: Int, password: String) {
@@ -306,16 +337,20 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun toggleRepeat() {
+        // Capture intended value once to avoid a race where the polling loop updates
+        // _status.value between the setRepeat call and the optimistic local update.
+        val newRepeat = !_status.value.repeat
         safeAction {
-            client.setRepeat(!_status.value.repeat)
-            _status.value = _status.value.copy(repeat = !_status.value.repeat)
+            client.setRepeat(newRepeat)
+            _status.value = _status.value.copy(repeat = newRepeat)
         }
     }
 
     fun toggleShuffle() {
+        val newRandom = !_status.value.random
         safeAction {
-            client.setRandom(!_status.value.random)
-            _status.value = _status.value.copy(random = !_status.value.random)
+            client.setRandom(newRandom)
+            _status.value = _status.value.copy(random = newRandom)
         }
     }
 

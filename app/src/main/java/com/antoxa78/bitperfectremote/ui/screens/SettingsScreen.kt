@@ -14,6 +14,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import com.antoxa78.bitperfectremote.ui.PlayerViewModel
+import kotlinx.coroutines.flow.drop
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -23,6 +24,20 @@ fun SettingsScreen(viewModel: PlayerViewModel, onBack: () -> Unit) {
     var password by remember { mutableStateOf(viewModel.savedPassword) }
     var serverName by remember { mutableStateOf(viewModel.savedName) }
     var savedMessage by remember { mutableStateOf(false) }
+    // Track whether the user has pressed Save so we don't react to the initial
+    // auto-connect that happens before the screen was even opened.
+    var connectRequested by remember { mutableStateOf(false) }
+
+    val isConnected by viewModel.isConnected.collectAsState()
+    val isConnecting by viewModel.isConnecting.collectAsState()
+
+    // Show "saved" only once the connection actually succeeds, not immediately on click.
+    LaunchedEffect(isConnected) {
+        if (connectRequested && isConnected) {
+            savedMessage = true
+            connectRequested = false
+        }
+    }
 
     BackHandler { onBack() }
 
@@ -109,15 +124,25 @@ fun SettingsScreen(viewModel: PlayerViewModel, onBack: () -> Unit) {
 
             Button(
                 onClick = {
+                    savedMessage = false
+                    connectRequested = true
                     val p = port.toIntOrNull() ?: 6600
                     viewModel.connect(ipAddress.trim(), p, password, true, serverName.trim())
-                    savedMessage = true
                 },
+                enabled = !isConnecting,
                 modifier = Modifier.fillMaxWidth().height(50.dp)
             ) {
-                Icon(Icons.Default.Save, contentDescription = null)
-                Spacer(modifier = Modifier.width(8.dp))
-                Text("Save and Connect")
+                if (isConnecting) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(20.dp),
+                        color = MaterialTheme.colorScheme.onPrimary,
+                        strokeWidth = 2.dp
+                    )
+                } else {
+                    Icon(Icons.Default.Save, contentDescription = null)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Save and Connect")
+                }
             }
         }
     }

@@ -18,7 +18,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.antoxa78.bitperfectremote.data.BrowseEntry
-import com.antoxa78.bitperfectremote.data.MpdLibraryClient
 import com.antoxa78.bitperfectremote.ui.PlayerViewModel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -53,7 +52,9 @@ private fun mapRootStorageNames(entries: List<BrowseEntry>): List<BrowseEntry> {
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun MusicBrowserScreen(viewModel: PlayerViewModel, onBack: () -> Unit) {
-    val libraryClient = remember { MpdLibraryClient(viewModel.client) }
+    // Use the ViewModel's dedicated browser client so directory listings don't
+    // compete with the polling mutex on the main client connection.
+    val libraryClient = viewModel.libraryClient
 
     // Navigation history stack. First element is always the library root ("").
     val pathHistory = remember { mutableStateListOf("") }
@@ -98,6 +99,7 @@ fun MusicBrowserScreen(viewModel: PlayerViewModel, onBack: () -> Unit) {
         isLoading = true
         loadError = null
         try {
+            viewModel.ensureBrowserConnected()
             val loaded = libraryClient.lsinfo(currentPath)
             entries = if (currentPath.isEmpty()) mapRootStorageNames(loaded) else loaded
             loadError = null

@@ -58,6 +58,10 @@ class MpdLibraryClient(private val client: MpdClient) {
         }
         // MPD add command adds all files in directory recursively if uri is a directory
         client.sendCommand("add \"${toAbsolutePath(uri)}\"")
-        client.play()
+        // Only start playback when replacing the queue; "Add to Playlist" (replace=false)
+        // should queue silently without interrupting or starting playback.
+        if (replace) {
+            client.play()
+        }
     }
 }

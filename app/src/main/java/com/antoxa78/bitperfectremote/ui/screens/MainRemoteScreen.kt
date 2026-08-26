@@ -8,6 +8,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -622,7 +623,7 @@ fun QueueTab(viewModel: PlayerViewModel, playlist: List<QueueItem>, currentSongI
                 )
             }
 
-            items(playlist) { item ->
+            itemsIndexed(playlist) { index, item ->
                 val isCurrent = item.id.toIntOrNull() == currentSongId
                 Card(
                     onClick = { viewModel.playId(item.id) },
@@ -648,7 +649,7 @@ fun QueueTab(viewModel: PlayerViewModel, playlist: List<QueueItem>, currentSongI
                                     Icon(Icons.Default.GraphicEq, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.size(20.dp))
                                 } else {
                                     Text(
-                                        text = (playlist.indexOf(item) + 1).toString(),
+                                        text = (index + 1).toString(),
                                         style = MaterialTheme.typography.bodySmall,
                                         fontWeight = FontWeight.Bold
                                     )
