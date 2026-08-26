@@ -204,9 +204,13 @@ class MpdClient {
             totalRead += read
         }
 
-        // Consume trailing newline + OK line
+        // The MPD protocol terminates the binary chunk with "\nOK\n". The leading
+        // '\n' arrives as an empty line from readLine(); subsequent non-empty lines
+        // are the terminal "OK" (or "ACK …" on error). Skip empty separator lines
+        // explicitly rather than relying on them silently falling through the loop.
         while (true) {
             val line = readLine(bis)
+            if (line.isEmpty()) continue          // '\n' separator between binary data and text
             if (line == "OK" || line.startsWith("ACK")) break
         }
         return BinaryChunk(totalSize, buffer)
