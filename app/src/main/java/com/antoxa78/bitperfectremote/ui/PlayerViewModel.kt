@@ -29,8 +29,11 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
     // or triggers a reconnection.
     private val artClient = MpdClient()
     // Separate connection used only for the music browser, so directory listings
-    // don't compete with the polling mutex on the main client.
-    private val browserClient = MpdClient()
+    // don't compete with the polling mutex on the main client. It also carries
+    // "add" commands for the network-shares feature: adding a share/folder makes
+    // the player enumerate the whole tree over SMB, which can block for minutes,
+    // so this connection gets a much larger read timeout than the default 10s.
+    private val browserClient = MpdClient(readTimeoutMs = 5 * 60 * 1000)
     val libraryClient = MpdLibraryClient(browserClient)
 
     private val prefs = run {
@@ -159,6 +162,24 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
         if (!browserClient.isConnected && connHost.isNotBlank()) {
             browserClient.connect(connHost, connPort, connPassword)
         }
+    }
+
+    /** Attempts to reconnect the browser client with retries. */
+    suspend fun reconnectBrowser(): Boolean {
+        if (connHost.isBlank()) return false
+        var attempts = 0
+        while (attempts < 5 && !explicitDisconnect) {
+            attempts++
+            try {
+                browserClient.disconnect()
+                val success = browserClient.connect(connHost, connPort, connPassword)
+                if (success) return true
+            } catch (e: Exception) {
+                // retry
+            }
+            delay(1000)
+        }
+        return false
     }
 
     private fun startPolling(host: String, port: Int, password: String) {

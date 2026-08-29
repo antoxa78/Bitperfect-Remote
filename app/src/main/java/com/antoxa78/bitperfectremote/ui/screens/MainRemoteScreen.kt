@@ -40,12 +40,14 @@ import com.antoxa78.bitperfectremote.data.TrackInfo
 import com.antoxa78.bitperfectremote.ui.PlayerViewModel
 import kotlinx.coroutines.launch
 
+private fun Color.luminance(): Float =
+    0.2126f * red + 0.7152f * green + 0.0722f * blue
+
 private val themeColors = listOf(
     "blue" to Color(0xFF3B82F6),
-    "green" to Color(0xFF10B981),
+    "neon" to Color(0xFF00F0FF),
+    "black" to Color(0xFF000000),
     "purple" to Color(0xFF8B5CF6),
-    "orange" to Color(0xFFF97316),
-    "red" to Color(0xFFEF4444),
     "teal" to Color(0xFF14B8A6),
     "pink" to Color(0xFFEC4899),
     "indigo" to Color(0xFF6366F1)
@@ -57,7 +59,8 @@ fun MainRemoteScreen(
     viewModel: PlayerViewModel,
     onDisconnect: () -> Unit,
     onOpenSettings: () -> Unit,
-    onOpenBrowser: () -> Unit
+    onOpenBrowser: () -> Unit,
+    onOpenShares: () -> Unit
 ) {
     var selectedTab by remember { mutableIntStateOf(0) }
     val status by viewModel.status.collectAsState()
@@ -100,6 +103,17 @@ fun MainRemoteScreen(
                     onClick = {
                         scope.launch { drawerState.close() }
                         onOpenBrowser()
+                    },
+                    modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding)
+                )
+
+                NavigationDrawerItem(
+                    icon = { Icon(Icons.Default.Folder, contentDescription = null) },
+                    label = { Text("Network Shares") },
+                    selected = false,
+                    onClick = {
+                        scope.launch { drawerState.close() }
+                        onOpenShares()
                     },
                     modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding)
                 )
@@ -201,7 +215,7 @@ fun MainRemoteScreen(
                                         Icon(
                                             Icons.Default.Check,
                                             contentDescription = null,
-                                            tint = Color.White,
+                                            tint = if (color.luminance() > 0.3f) Color.Black else Color.White,
                                             modifier = Modifier.size(16.dp)
                                         )
                                     }

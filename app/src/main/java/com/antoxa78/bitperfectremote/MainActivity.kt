@@ -20,6 +20,7 @@ import com.antoxa78.bitperfectremote.ui.PlayerViewModel
 import com.antoxa78.bitperfectremote.ui.screens.ConnectionScreen
 import com.antoxa78.bitperfectremote.ui.screens.MainRemoteScreen
 import com.antoxa78.bitperfectremote.ui.screens.MusicBrowserScreen
+import com.antoxa78.bitperfectremote.ui.screens.NetworkSharesScreen
 import com.antoxa78.bitperfectremote.ui.screens.SettingsScreen
 
 class MainActivity : ComponentActivity() {
@@ -66,24 +67,35 @@ class MainActivity : ComponentActivity() {
             val secondaryContainerTint = 0.18f
             val primaryContainerTint = if (isDarkTheme) 0.28f else 0.18f
 
+            val accentLuminance = accent.luminance()
+            // A very dark accent (e.g. black) makes accent-derived "on" colors
+            // unreadable against the darkened containers, so fall back to the
+            // base scheme's theme-aware on-colors in that case.
+            val isDarkAccent = accentLuminance <= 0.3f
+            // Pick the higher-contrast text color on solid accent surfaces. The
+            // blind crossover is ~0.18 lum, but 0.3 keeps the darker blue/indigo/
+            // purple on white while flipping light/medium tones like neon and teal
+            // to black (white on teal is only ~2.5:1, barely readable).
+            val onAccent = if (isDarkAccent) baseScheme.onPrimary else if (accentLuminance > 0.3f) Color.Black else Color.White
+
             MaterialTheme(
                 colorScheme = baseScheme.copy(
                     primary = accent,
-                    onPrimary = if (accent.luminance() > 0.5f) Color.Black else Color.White,
+                    onPrimary = onAccent,
                     primaryContainer = accent.copy(alpha = primaryContainerTint),
-                    onPrimaryContainer = accent.copy(alpha = 0.95f),
+                    onPrimaryContainer = if (isDarkAccent) baseScheme.onPrimaryContainer else accent.copy(alpha = 0.95f),
                     secondary = accent,
-                    onSecondary = if (accent.luminance() > 0.5f) Color.Black else Color.White,
+                    onSecondary = onAccent,
                     secondaryContainer = accent.copy(alpha = secondaryContainerTint),
-                    onSecondaryContainer = accent.copy(alpha = 0.9f),
+                    onSecondaryContainer = if (isDarkAccent) baseScheme.onSecondaryContainer else accent.copy(alpha = 0.9f),
                     surface = baseScheme.surface.blendWith(accent, surfaceTint),
                     onSurface = baseScheme.onSurface,
                     surfaceVariant = baseScheme.surfaceVariant.blendWith(accent, surfaceVariantTint),
-                    onSurfaceVariant = baseScheme.onSurfaceVariant.blendWith(accent, 0.35f),
+                    onSurfaceVariant = if (isDarkAccent) baseScheme.onSurfaceVariant else baseScheme.onSurfaceVariant.blendWith(accent, 0.35f),
                     background = baseScheme.background.blendWith(accent, surfaceTint),
                     onBackground = baseScheme.onBackground,
-                    outline = accent.copy(alpha = 0.4f),
-                    outlineVariant = accent.copy(alpha = 0.2f)
+                    outline = if (isDarkAccent) baseScheme.outline else accent.copy(alpha = 0.4f),
+                    outlineVariant = if (isDarkAccent) baseScheme.outlineVariant else accent.copy(alpha = 0.2f)
                 )
             ) {
                 Surface(
@@ -109,6 +121,12 @@ class MainActivity : ComponentActivity() {
                                 onBack = { currentScreen = "main" }
                             )
                         }
+                        "shares" -> {
+                            NetworkSharesScreen(
+                                viewModel = viewModel,
+                                onBack = { currentScreen = "main" }
+                            )
+                        }
                         "connection" -> {
                             ConnectionScreen(
                                 viewModel = viewModel,
@@ -124,7 +142,8 @@ class MainActivity : ComponentActivity() {
                                         viewModel.disconnect()
                                     },
                                     onOpenSettings = { currentScreen = "settings" },
-                                    onOpenBrowser = { currentScreen = "browser" }
+                                    onOpenBrowser = { currentScreen = "browser" },
+                                    onOpenShares = { currentScreen = "shares" }
                                 )
                             } else {
                                 ConnectionScreen(
@@ -158,10 +177,9 @@ private fun Color.blendWith(other: Color, ratio: Float): Color {
 
 // Accent color palette selectable from the Application Themes menu.
 fun accentColor(key: String): Color = when (key) {
-    "green" -> Color(0xFF10B981)
+    "neon" -> Color(0xFF00F0FF)
+    "black" -> Color(0xFF000000)
     "purple" -> Color(0xFF8B5CF6)
-    "orange" -> Color(0xFFF97316)
-    "red" -> Color(0xFFEF4444)
     "teal" -> Color(0xFF14B8A6)
     "pink" -> Color(0xFFEC4899)
     "indigo" -> Color(0xFF6366F1)

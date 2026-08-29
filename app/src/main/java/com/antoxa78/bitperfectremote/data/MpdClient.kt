@@ -11,9 +11,14 @@ import java.net.Socket
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
-class MpdClient {
+class MpdClient(private val readTimeoutMs: Int = DEFAULT_READ_TIMEOUT_MS) {
     companion object {
         private const val TAG = "MpdClient"
+        // Generous enough for the server's online album-art lookups without ever
+        // hanging the UI. The network-shares browser uses a much larger timeout
+        // because adding a share/folder can block the player for minutes while it
+        // enumerates files over SMB.
+        private const val DEFAULT_READ_TIMEOUT_MS = 10000
     }
 
     private var socket: Socket? = null
@@ -42,7 +47,7 @@ class MpdClient {
                 disconnectInternal()
                 val sock = Socket()
                 sock.connect(InetSocketAddress(host, port), 3000)
-                sock.soTimeout = 10000 // Prevent socket hangs/freezes; generous for online art lookups
+                sock.soTimeout = readTimeoutMs // Prevent socket hangs; generous for heavy ops
                 socket = sock
                 inputStream = BufferedInputStream(sock.getInputStream())
                 writer = PrintWriter(sock.getOutputStream(), true)

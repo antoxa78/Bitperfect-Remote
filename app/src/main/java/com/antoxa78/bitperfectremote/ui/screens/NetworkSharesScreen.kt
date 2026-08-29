@@ -23,49 +23,22 @@ import com.antoxa78.bitperfectremote.ui.smbLabel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
-// Keep absolute paths intact; only trim stray whitespace and trailing slashes.
-private fun normalizePath(path: String): String =
-    path.trim().trimEnd('/')
-
-// Friendly name for well-known Android storage roots, or null if not one.
-private fun storageRootName(path: String): String? = when {
-    path.contains("/storage/emulated", ignoreCase = true) -> "Internal Storage"
-    path.startsWith("/storage/", ignoreCase = true) -> "External Drive"
-    else -> null
-}
-
-// At the library root, replace raw storage paths with friendly names.
-private fun mapRootStorageNames(entries: List<BrowseEntry>): List<BrowseEntry> {
-    var externalCount = 0
-    return entries.map { e ->
-        val friendly = if (e.isDirectory) storageRootName(e.file) else null
-        if (friendly != null && friendly == "Internal Storage") {
-            e.copy(title = friendly)
-        } else if (friendly != null) {
-            externalCount++
-            e.copy(title = if (externalCount == 1) "External Drive" else "External Drive $externalCount")
-        } else {
-            e
-        }
-    }
-}
+private fun normalizePath(path: String): String = path.trim().trimEnd('/')
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
-fun MusicBrowserScreen(viewModel: PlayerViewModel, onBack: () -> Unit) {
-    // Use the ViewModel's dedicated browser client so directory listings don't
-    // compete with the polling mutex on the main client connection.
+fun NetworkSharesScreen(viewModel: PlayerViewModel, onBack: () -> Unit) {
     val libraryClient = viewModel.libraryClient
 
-    // Navigation history stack. First element is always the library root ("").
     val pathHistory = remember { mutableStateListOf("") }
     val currentPath = pathHistory.lastOrNull() ?: ""
 
     var entries by remember { mutableStateOf<List<BrowseEntry>>(emptyList()) }
     var isLoading by remember { mutableStateOf(true) }
+    var isAdding by remember { mutableStateOf(false) }
     var loadError by remember { mutableStateOf<String?>(null) }
     var snackbarMessage by remember { mutableStateOf<String?>(null) }
-    var selectedFolderForDialog by remember { mutableStateOf<BrowseEntry?>(null) }
+    var selectedForDialog by remember { mutableStateOf<BrowseEntry?>(null) }
     var reloadTick by remember { mutableIntStateOf(0) }
 
     val scope = rememberCoroutineScope()
@@ -75,7 +48,6 @@ fun MusicBrowserScreen(viewModel: PlayerViewModel, onBack: () -> Unit) {
         if (pathHistory.size > 1) {
             pathHistory.removeAt(pathHistory.size - 1)
         } else {
-            // Already at the root of the browser: leave the browser entirely.
             onBack()
         }
     }
@@ -87,14 +59,8 @@ fun MusicBrowserScreen(viewModel: PlayerViewModel, onBack: () -> Unit) {
         }
     }
 
-    // System back button / gesture must behave exactly like the top-bar back arrow:
-    // go one folder up, and exit the browser only when already at the root.
-    BackHandler {
-        navigateUp()
-    }
+    BackHandler { navigateUp() }
 
-    // Reload whenever the current path changes, a retry is requested,
-    // or the connection comes back after being lost.
     LaunchedEffect(currentPath, reloadTick, isConnected) {
         if (!isConnected) return@LaunchedEffect
         isLoading = true
@@ -102,11 +68,14 @@ fun MusicBrowserScreen(viewModel: PlayerViewModel, onBack: () -> Unit) {
         try {
             viewModel.ensureBrowserConnected()
             val loaded = libraryClient.lsinfo(currentPath)
-            entries = if (currentPath.isEmpty()) mapRootStorageNames(loaded) else loaded
+            entries = if (currentPath.isEmpty()) {
+                // Only the shared folders the player exposes, not local storage.
+                loaded.filter { it.file.contains("://") }
+            } else {
+                loaded
+            }
             loadError = null
         } catch (e: Exception) {
-            // If the browser connection dropped, reconnect in the background
-            // and retry automatically instead of showing a stale error.
             if (e.message?.contains("closed", true) == true || e.message?.contains("Connection", true) == true) {
                 scope.launch {
                     if (viewModel.reconnectBrowser()) {
@@ -120,7 +89,6 @@ fun MusicBrowserScreen(viewModel: PlayerViewModel, onBack: () -> Unit) {
         isLoading = false
     }
 
-    // Auto-hide snackbar
     LaunchedEffect(snackbarMessage) {
         if (snackbarMessage != null) {
             delay(2500)
@@ -134,10 +102,7 @@ fun MusicBrowserScreen(viewModel: PlayerViewModel, onBack: () -> Unit) {
                 title = {
                     Column {
                         Text(
-                            text = when {
-                                currentPath.isEmpty() -> "Music Browser"
-                                else -> storageRootName(currentPath) ?: currentPath.substringAfterLast('/')
-                            },
+                            text = if (currentPath.isEmpty()) "Network Shares" else smbLabel(currentPath),
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
@@ -202,20 +167,14 @@ fun MusicBrowserScreen(viewModel: PlayerViewModel, onBack: () -> Unit) {
                         )
                         Spacer(modifier = Modifier.height(12.dp))
                         Text(
-                            text = "Failed to browse directory:\n${loadError}",
+                            text = "Failed to browse:\n${loadError}",
                             textAlign = TextAlign.Center,
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                         Spacer(modifier = Modifier.height(16.dp))
-                        Row {
-                            OutlinedButton(onClick = { navigateUp() }) {
-                                Text("Go Back")
-                            }
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Button(onClick = { reloadTick++ }) {
-                                Text("Retry")
-                            }
+                        Button(onClick = { reloadTick++ }) {
+                            Text("Retry")
                         }
                     }
                 }
@@ -224,14 +183,28 @@ fun MusicBrowserScreen(viewModel: PlayerViewModel, onBack: () -> Unit) {
                         modifier = Modifier.align(Alignment.Center).padding(32.dp),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
+                        Icon(
+                            Icons.Default.FolderOff,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.outlineVariant,
+                            modifier = Modifier.size(48.dp)
+                        )
+                        Spacer(modifier = Modifier.height(12.dp))
                         Text(
-                            text = "Directory is empty",
-                            style = MaterialTheme.typography.bodyLarge,
+                            text = "No network shares available.\n\nAdd shares in the Bitperfect player's\n'Network Shares' menu, then refresh.",
+                            textAlign = TextAlign.Center,
+                            style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                         Spacer(modifier = Modifier.height(16.dp))
-                        Button(onClick = { navigateUp() }) {
-                            Text("Back")
+                        Row {
+                            OutlinedButton(onClick = onBack) {
+                                Text("Back")
+                            }
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Button(onClick = { reloadTick++ }) {
+                                Text("Refresh")
+                            }
                         }
                     }
                 }
@@ -239,19 +212,19 @@ fun MusicBrowserScreen(viewModel: PlayerViewModel, onBack: () -> Unit) {
                     LazyColumn(modifier = Modifier.fillMaxSize()) {
                         items(entries) { entry ->
                             ListItem(
-                                headlineContent = { Text(if (entry.isDirectory && entry.title.isBlank()) smbLabel(entry.file) else entry.title, maxLines = 1, overflow = TextOverflow.Ellipsis) },
-                                supportingContent = {
-                                    if (!entry.isDirectory && entry.artist.isNotEmpty()) {
-                                        Text(entry.artist, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                    }
+                                headlineContent = {
+                                    Text(
+                                        // Directories carry a trailing slash in the URI, which
+                                        // yields a blank title from substringAfterLast('/'), so fall
+                                        // back to the share/folder name derived from the smb:// path.
+                                        text = if (entry.isDirectory) entry.title.ifBlank { smbLabel(entry.file) } else entry.title,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
                                 },
                                 leadingContent = {
                                     Icon(
-                                        imageVector = when {
-                                            !entry.isDirectory -> Icons.Default.Audiotrack
-                                            entry.file.contains("://") -> Icons.Filled.Storage
-                                            else -> Icons.Default.Folder
-                                        },
+                                        imageVector = if (entry.isDirectory) Icons.Default.Folder else Icons.Default.Audiotrack,
                                         contentDescription = null,
                                         tint = if (entry.isDirectory) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
                                     )
@@ -260,15 +233,22 @@ fun MusicBrowserScreen(viewModel: PlayerViewModel, onBack: () -> Unit) {
                                     if (!entry.isDirectory) {
                                         IconButton(onClick = {
                                             scope.launch {
+                                                isAdding = true
                                                 try {
                                                     libraryClient.addUri(entry.file)
                                                     snackbarMessage = "Added to queue"
                                                 } catch (e: Exception) {
                                                     snackbarMessage = "Add failed: ${e.message}"
+                                                } finally {
+                                                    isAdding = false
                                                 }
                                             }
                                         }) {
-                                            Icon(Icons.Default.Add, contentDescription = "Add to Queue")
+                                            if (isAdding && !entry.isDirectory) {
+                                                CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                                            } else {
+                                                Icon(Icons.Default.Add, contentDescription = "Add to Queue")
+                                            }
                                         }
                                     } else {
                                         Icon(Icons.Default.ChevronRight, contentDescription = null)
@@ -279,19 +259,21 @@ fun MusicBrowserScreen(viewModel: PlayerViewModel, onBack: () -> Unit) {
                                         if (entry.isDirectory) {
                                             openFolder(entry.file)
                                         } else {
-                                            // Default: replace the playlist and play the selected file.
                                             scope.launch {
+                                                isAdding = true
                                                 try {
                                                     libraryClient.loadFolderToQueue(entry.file, replace = true)
                                                     snackbarMessage = "Playing ${entry.title}"
                                                 } catch (e: Exception) {
                                                     snackbarMessage = "Failed: ${e.message}"
+                                                } finally {
+                                                    isAdding = false
                                                 }
                                             }
                                         }
                                     },
                                     onLongClick = {
-                                        selectedFolderForDialog = entry
+                                        selectedForDialog = entry
                                     }
                                 )
                             )
@@ -301,10 +283,9 @@ fun MusicBrowserScreen(viewModel: PlayerViewModel, onBack: () -> Unit) {
                 }
             }
 
-            // Folder Action Dialog
-            selectedFolderForDialog?.let { folder ->
+            selectedForDialog?.let { folder ->
                 AlertDialog(
-                    onDismissRequest = { selectedFolderForDialog = null },
+                    onDismissRequest = { selectedForDialog = null },
                     shape = RoundedCornerShape(28.dp),
                     icon = {
                         Surface(
@@ -347,14 +328,17 @@ fun MusicBrowserScreen(viewModel: PlayerViewModel, onBack: () -> Unit) {
                             Button(
                                 onClick = {
                                     scope.launch {
+                                        isAdding = true
                                         try {
                                             libraryClient.loadFolderToQueue(folder.file, replace = false)
-                                            snackbarMessage = "Added folder to playlist"
+                                            snackbarMessage = "Added to playlist"
                                         } catch (e: Exception) {
                                             snackbarMessage = "Failed: ${e.message}"
+                                        } finally {
+                                            isAdding = false
                                         }
                                     }
-                                    selectedFolderForDialog = null
+                                    selectedForDialog = null
                                 },
                                 modifier = Modifier.fillMaxWidth().height(48.dp),
                                 shape = RoundedCornerShape(12.dp)
@@ -367,14 +351,17 @@ fun MusicBrowserScreen(viewModel: PlayerViewModel, onBack: () -> Unit) {
                             FilledTonalButton(
                                 onClick = {
                                     scope.launch {
+                                        isAdding = true
                                         try {
                                             libraryClient.loadFolderToQueue(folder.file, replace = true)
-                                            snackbarMessage = "Replaced playlist with folder"
+                                            snackbarMessage = "Replaced playlist"
                                         } catch (e: Exception) {
                                             snackbarMessage = "Failed: ${e.message}"
+                                        } finally {
+                                            isAdding = false
                                         }
                                     }
-                                    selectedFolderForDialog = null
+                                    selectedForDialog = null
                                 },
                                 modifier = Modifier.fillMaxWidth().height(48.dp),
                                 shape = RoundedCornerShape(12.dp)
@@ -385,7 +372,7 @@ fun MusicBrowserScreen(viewModel: PlayerViewModel, onBack: () -> Unit) {
                             }
 
                             TextButton(
-                                onClick = { selectedFolderForDialog = null },
+                                onClick = { selectedForDialog = null },
                                 modifier = Modifier.fillMaxWidth().height(40.dp)
                             ) {
                                 Text("Cancel", color = MaterialTheme.colorScheme.outline)
@@ -400,6 +387,26 @@ fun MusicBrowserScreen(viewModel: PlayerViewModel, onBack: () -> Unit) {
                     modifier = Modifier.align(Alignment.BottomCenter).padding(16.dp)
                 ) {
                     Text(message)
+                }
+            }
+
+            if (isAdding) {
+                Surface(
+                    color = MaterialTheme.colorScheme.surface.copy(alpha = 0.85f),
+                    shape = RoundedCornerShape(16.dp),
+                    modifier = Modifier.align(Alignment.Center).padding(24.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 24.dp, vertical = 16.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        CircularProgressIndicator(modifier = Modifier.size(22.dp), strokeWidth = 2.dp)
+                        Spacer(modifier = Modifier.width(16.dp))
+                        Text(
+                            text = "Adding files to player...\nThis can take a while for large folders.",
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                    }
                 }
             }
         }

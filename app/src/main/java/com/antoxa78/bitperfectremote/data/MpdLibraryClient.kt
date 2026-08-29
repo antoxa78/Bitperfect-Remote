@@ -6,10 +6,13 @@ import kotlinx.coroutines.withContext
 class MpdLibraryClient(private val client: MpdClient) {
 
     // The Bitperfect MPD server rejects relative paths ("relative paths not supported").
-    // Always send absolute path arguments.
+    // Always send absolute path arguments. Scheme URIs (smb://, http(s)://, content://)
+    // are already absolute and must not gain a leading slash.
     private fun toAbsolutePath(path: String): String {
         val trimmed = path.trim()
-        return if (trimmed.isEmpty() || trimmed.startsWith("/")) trimmed else "/$trimmed"
+        if (trimmed.isEmpty()) return trimmed
+        if (trimmed.contains("://")) return trimmed
+        return if (trimmed.startsWith("/")) trimmed else "/$trimmed"
     }
 
     suspend fun lsinfo(path: String = ""): List<BrowseEntry> = withContext(Dispatchers.IO) {
