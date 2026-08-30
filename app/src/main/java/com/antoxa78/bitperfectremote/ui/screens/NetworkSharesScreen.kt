@@ -14,16 +14,33 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.antoxa78.bitperfectremote.data.BrowseEntry
 import com.antoxa78.bitperfectremote.ui.PlayerViewModel
+import com.antoxa78.bitperfectremote.ui.onSurfaceAccentColor
+import com.antoxa78.bitperfectremote.ui.smbHost
 import com.antoxa78.bitperfectremote.ui.smbLabel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
+// Directory icons use the accent color, but a dark accent (e.g. black) can be
+// invisible against a dark surface. Fall back to the theme's on-surface color so
+// the icon always contrasts with the background, while bright accents keep their
+// accent tint.
+@Composable
+private fun directoryIconTint(): Color =
+    if (MaterialTheme.colorScheme.primary.luminance() < 0.3f)
+        MaterialTheme.colorScheme.onSurface
+    else
+        MaterialTheme.colorScheme.primary
+
 private fun normalizePath(path: String): String = path.trim().trimEnd('/')
+
+private fun Color.luminance(): Float =
+    0.2126f * red + 0.7152f * green + 0.0722f * blue
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
@@ -36,6 +53,7 @@ fun NetworkSharesScreen(viewModel: PlayerViewModel, onBack: () -> Unit) {
     var entries by remember { mutableStateOf<List<BrowseEntry>>(emptyList()) }
     var isLoading by remember { mutableStateOf(true) }
     var isAdding by remember { mutableStateOf(false) }
+    var isBusy by remember { mutableStateOf(false) }
     var loadError by remember { mutableStateOf<String?>(null) }
     var snackbarMessage by remember { mutableStateOf<String?>(null) }
     var selectedForDialog by remember { mutableStateOf<BrowseEntry?>(null) }
@@ -56,6 +74,27 @@ fun NetworkSharesScreen(viewModel: PlayerViewModel, onBack: () -> Unit) {
         val normalized = normalizePath(path)
         if (normalized != currentPath) {
             pathHistory.add(normalized)
+        }
+    }
+
+    // Applies the [Replace All] / [Add To Playlist] bottom-bar actions to the
+    // currently viewed folder. The share root has no folder to queue, so we
+    // guide the user to open one first.
+    fun queueCurrentFolder(replace: Boolean) {
+        if (currentPath.isEmpty()) {
+            snackbarMessage = "Open a folder first"
+            return
+        }
+        scope.launch {
+            isBusy = true
+            try {
+                libraryClient.loadFolderToQueue(currentPath, replace)
+                snackbarMessage = if (replace) "Replaced playlist" else "Added to playlist"
+            } catch (e: Exception) {
+                snackbarMessage = "Failed: ${e.message}"
+            } finally {
+                isBusy = false
+            }
         }
     }
 
@@ -123,6 +162,52 @@ fun NetworkSharesScreen(viewModel: PlayerViewModel, onBack: () -> Unit) {
                     }
                 }
             )
+        },
+        bottomBar = {
+            if (isConnected) {
+                Surface(
+                    color = MaterialTheme.colorScheme.surface,
+                    shadowElevation = 8.dp
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .windowInsetsPadding(WindowInsets.navigationBars)
+                            .padding(horizontal = 12.dp, vertical = 10.dp),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        OutlinedButton(
+                            onClick = { navigateUp() },
+                            colors = ButtonDefaults.outlinedButtonColors(
+                                contentColor = onSurfaceAccentColor()
+                            ),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Icon(Icons.Default.ArrowBack, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Back")
+                        }
+                        FilledTonalButton(
+                            onClick = { queueCurrentFolder(replace = true) },
+                            enabled = !isBusy,
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Icon(Icons.Default.PlaylistRemove, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Replace All")
+                        }
+                        Button(
+                            onClick = { queueCurrentFolder(replace = false) },
+                            enabled = !isBusy,
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Icon(Icons.Default.PlaylistAdd, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Add to Playlist")
+                        }
+                    }
+                }
+            }
         }
     ) { paddingValues ->
         Box(modifier = Modifier.padding(paddingValues).fillMaxSize()) {
@@ -152,7 +237,10 @@ fun NetworkSharesScreen(viewModel: PlayerViewModel, onBack: () -> Unit) {
                     }
                 }
                 isLoading -> {
-                    CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
+                    CircularProgressIndicator(
+                        modifier = Modifier.align(Alignment.Center),
+                        color = onSurfaceAccentColor()
+                    )
                 }
                 loadError != null -> {
                     Column(
@@ -198,7 +286,12 @@ fun NetworkSharesScreen(viewModel: PlayerViewModel, onBack: () -> Unit) {
                         )
                         Spacer(modifier = Modifier.height(16.dp))
                         Row {
-                            OutlinedButton(onClick = onBack) {
+                            OutlinedButton(
+                                onClick = onBack,
+                                colors = ButtonDefaults.outlinedButtonColors(
+                                    contentColor = onSurfaceAccentColor()
+                                )
+                            ) {
                                 Text("Back")
                             }
                             Spacer(modifier = Modifier.width(8.dp))
@@ -214,19 +307,29 @@ fun NetworkSharesScreen(viewModel: PlayerViewModel, onBack: () -> Unit) {
                             ListItem(
                                 headlineContent = {
                                     Text(
-                                        // Directories carry a trailing slash in the URI, which
-                                        // yields a blank title from substringAfterLast('/'), so fall
-                                        // back to the share/folder name derived from the smb:// path.
+                                        // At the root level each entry is a share mount point;
+                                        // show the share name with the server host (hostname or
+                                        // IP) as supporting text. Inside a share, show the
+                                        // folder/file name as usual.
                                         text = if (entry.isDirectory) entry.title.ifBlank { smbLabel(entry.file) } else entry.title,
                                         maxLines = 1,
                                         overflow = TextOverflow.Ellipsis
                                     )
                                 },
+                                supportingContent = {
+                                    if (currentPath.isEmpty()) {
+                                        Text(
+                                            text = smbHost(entry.file),
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                    }
+                                },
                                 leadingContent = {
                                     Icon(
                                         imageVector = if (entry.isDirectory) Icons.Default.Folder else Icons.Default.Audiotrack,
                                         contentDescription = null,
-                                        tint = if (entry.isDirectory) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                                        tint = if (entry.isDirectory) directoryIconTint() else MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                 },
                                 trailingContent = {
@@ -245,7 +348,11 @@ fun NetworkSharesScreen(viewModel: PlayerViewModel, onBack: () -> Unit) {
                                             }
                                         }) {
                                             if (isAdding && !entry.isDirectory) {
-                                                CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                                                CircularProgressIndicator(
+                                                    modifier = Modifier.size(18.dp),
+                                                    strokeWidth = 2.dp,
+                                                    color = onSurfaceAccentColor()
+                                                )
                                             } else {
                                                 Icon(Icons.Default.Add, contentDescription = "Add to Queue")
                                             }
@@ -400,7 +507,11 @@ fun NetworkSharesScreen(viewModel: PlayerViewModel, onBack: () -> Unit) {
                         modifier = Modifier.padding(horizontal = 24.dp, vertical = 16.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        CircularProgressIndicator(modifier = Modifier.size(22.dp), strokeWidth = 2.dp)
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(22.dp),
+                            strokeWidth = 2.dp,
+                            color = onSurfaceAccentColor()
+                        )
                         Spacer(modifier = Modifier.width(16.dp))
                         Text(
                             text = "Adding files to player...\nThis can take a while for large folders.",

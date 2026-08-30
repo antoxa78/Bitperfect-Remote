@@ -15,6 +15,14 @@ class MpdLibraryClient(private val client: MpdClient) {
         return if (trimmed.startsWith("/")) trimmed else "/$trimmed"
     }
 
+    // Playlist files (*.m3u, *.m3u8, *.pls) are not directly playable audio: MPD
+    // must load their contents into the queue via the "load" command. Sending them
+    // through "add" yields an "not playable file" server error.
+    private fun isPlaylistFile(path: String): Boolean {
+        val lower = path.lowercase()
+        return lower.endsWith(".m3u") || lower.endsWith(".m3u8") || lower.endsWith(".pls")
+    }
+
     suspend fun lsinfo(path: String = ""): List<BrowseEntry> = withContext(Dispatchers.IO) {
         val absPath = toAbsolutePath(path)
         val cmd = if (absPath.isEmpty()) "lsinfo" else "lsinfo \"$absPath\""
@@ -52,15 +60,26 @@ class MpdLibraryClient(private val client: MpdClient) {
     }
 
     suspend fun addUri(uri: String) = withContext(Dispatchers.IO) {
-        client.sendCommand("add \"${toAbsolutePath(uri)}\"")
+        val abs = toAbsolutePath(uri)
+        if (isPlaylistFile(uri)) {
+            client.sendCommand("load \"$abs\"")
+        } else {
+            client.sendCommand("add \"$abs\"")
+        }
     }
 
     suspend fun loadFolderToQueue(uri: String, replace: Boolean) = withContext(Dispatchers.IO) {
         if (replace) {
             client.clear()
         }
-        // MPD add command adds all files in directory recursively if uri is a directory
-        client.sendCommand("add \"${toAbsolutePath(uri)}\"")
+        val abs = toAbsolutePath(uri)
+        if (isPlaylistFile(uri)) {
+            // Load a playlist file's contents rather than trying to add it as audio.
+            client.sendCommand("load \"$abs\"")
+        } else {
+            // MPD add command adds all files in directory recursively if uri is a directory
+            client.sendCommand("add \"$abs\"")
+        }
         // Only start playback when replacing the queue; "Add to Playlist" (replace=false)
         // should queue silently without interrupting or starting playback.
         if (replace) {

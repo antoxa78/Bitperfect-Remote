@@ -3,6 +3,7 @@ package com.antoxa78.bitperfectremote.ui
 import android.app.Application
 import android.content.Context
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.AndroidViewModel
@@ -21,6 +22,19 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import org.json.JSONArray
+import org.json.JSONObject
+
+// A single saved MPD server entry. ip:port together form the identity key used
+// when deciding whether an entry already exists.
+data class MpdServer(
+    val name: String,
+    val ip: String,
+    val port: String,
+    val password: String
+) {
+    val key: String get() = "$ip:$port"
+}
 
 class PlayerViewModel(application: Application) : AndroidViewModel(application) {
     val client = MpdClient()
@@ -61,6 +75,80 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
     val serverLabel: String
         get() = savedName.ifBlank { "$savedIp:$savedPort" }
 
+    // Ordered, persisted list of saved servers. Kept as a snapshot state list so
+    // the Settings screen recomposes as entries are added, edited, or deleted.
+    val servers = mutableStateListOf<MpdServer>().apply { addAll(loadServers()) }
+
+    private fun loadServers(): List<MpdServer> {
+        val raw = prefs.getString("servers", null) ?: return emptyList()
+        return try {
+            val arr = JSONArray(raw)
+            (0 until arr.length()).mapNotNull { i ->
+                val o = arr.getJSONObject(i)
+                MpdServer(
+                    name = o.optString("name"),
+                    ip = o.optString("ip"),
+                    port = o.optString("port"),
+                    password = o.optString("password")
+                ).takeIf { it.ip.isNotBlank() }
+            }
+        } catch (e: Exception) {
+            emptyList()
+        }
+    }
+
+    private fun persistServers() {
+        val arr = JSONArray()
+        servers.forEach { s ->
+            arr.put(JSONObject().apply {
+                put("name", s.name)
+                put("ip", s.ip)
+                put("port", s.port)
+                put("password", s.password)
+            })
+        }
+        prefs.edit().putString("servers", arr.toString()).apply()
+    }
+
+    // Ports are stored in canonical numeric form so that MpdServer.key always
+    // matches the "ip:port" key recorded by connect() (which is built from the
+    // parsed Int port).
+    private fun canonicalPort(port: String): String =
+        port.trim().toIntOrNull()?.toString() ?: "6600"
+
+    /** Adds a new server, or updates an existing one with the same ip:port. */
+    fun addServer(name: String, ip: String, port: String, password: String) {
+        val server = MpdServer(name.trim(), ip.trim(), canonicalPort(port), password)
+        if (server.ip.isBlank()) return
+        val idx = servers.indexOfFirst { it.key == server.key }
+        if (idx >= 0) {
+            servers[idx] = server
+        } else {
+            servers.add(server)
+        }
+        persistServers()
+    }
+
+    fun updateServer(key: String, name: String, ip: String, port: String, password: String) {
+        val server = MpdServer(name.trim(), ip.trim(), canonicalPort(port), password)
+        if (server.ip.isBlank()) return
+        val idx = servers.indexOfFirst { it.key == key }
+        if (idx >= 0) servers[idx] = server
+        persistServers()
+    }
+
+    fun removeServer(key: String) {
+        val idx = servers.indexOfFirst { it.key == key }
+        if (idx >= 0) servers.removeAt(idx)
+        persistServers()
+    }
+
+    /** Connects to a saved server and marks it as the last-used auto-connect target. */
+    fun connectToServer(server: MpdServer) {
+        val p = server.port.toIntOrNull() ?: 6600
+        connect(server.ip, p, server.password, true, server.name)
+    }
+
     private var connHost = ""
     private var connPort = 6600
     private var connPassword = ""
@@ -88,6 +176,12 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
 
     private val _isConnecting = MutableStateFlow(false)
     val isConnecting: StateFlow<Boolean> = _isConnecting.asStateFlow()
+
+    // Identity (ip:port) of the server this app last connected to. Tracked
+    // reactively so the Settings screen can reliably mark the "last used" entry,
+    // rather than string-matching on non-reactive prefs properties.
+    private val _activeServerKey = MutableStateFlow<String?>(null)
+    val activeServerKey: StateFlow<String?> = _activeServerKey.asStateFlow()
 
     private val _status = MutableStateFlow(PlayerStatus())
     val status: StateFlow<PlayerStatus> = _status.asStateFlow()
@@ -120,6 +214,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
         connHost = host
         connPort = port
         connPassword = password
+        _activeServerKey.value = "$host:$port"
         if (remember) {
             val editor = prefs.edit()
                 .putString("saved_ip", host)
@@ -129,6 +224,10 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
                 editor.putString("saved_name", name)
             }
             editor.apply()
+            // Auto-connects (name == null) must not blank out a previously saved
+            // display name for this server, so fall back to the stored one.
+            val existingName = servers.firstOrNull { it.key == "$host:$port" }?.name
+            addServer(name ?: existingName ?: "", host, port.toString(), password)
         }
 
         viewModelScope.launch {
@@ -204,23 +303,60 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
                             requestCoverArt(song.file, song.artist, song.title)
                         }
                     } catch (e: Exception) {
-                        // Immediately drop connection and start reconnecting on first poll failure after sleep/wake
-                        _isConnected.value = false
-                        _errorMessage.value = "Connection lost. Reconnecting..."
-                        client.disconnect()
-                        attemptReconnection(host, port, password)
-                        break
+                        if (e is java.net.SocketTimeoutException) {
+                            // A socket timeout usually means MPD is busy (e.g. scanning
+                            // a slow external drive on the browser connection), not that
+                            // the connection is genuinely lost. Recover quietly so the
+                            // user isn't spammed with disconnect banners, and abort the
+                            // poll while we rebuild the socket. Only fall back to the
+                            // visible reconnect flow if the quiet recovery fails.
+                            recoverQuietly(host, port, password)
+                            if (client.isConnected) {
+                                continue
+                            }
+                        }
+                        // Real disconnect: connection closed, broken pipe, refused, etc.
+                        handleHardDisconnect(host, port, password)
+                        return@launch
                     }
                 } else {
                     _isConnected.value = false
                     _errorMessage.value = "Connection lost. Reconnecting..."
                     client.disconnect()
                     attemptReconnection(host, port, password)
-                    break
+                    return@launch
                 }
                 delay(2000)
             }
         }
+    }
+
+    // Re-establishes the main polling connection after a socket timeout without
+    // toggling the connected state or flashing a disconnect banner. Kept short so a
+    // long-running MPD operation (e.g. scanning a slow external drive) can't spin the
+    // UI with repeated "Connection lost" messages; a fresh socket also cleanly resets
+    // any partially-read MPD protocol stream after a timeout.
+    private suspend fun recoverQuietly(host: String, port: Int, password: String) {
+        var attempts = 0
+        while (!explicitDisconnect && attempts < 3 && !client.isConnected) {
+            attempts++
+            try {
+                client.disconnect()
+                if (client.connect(host, port, password)) return
+            } catch (e: Exception) {
+                // retry
+            }
+            delay(1500)
+        }
+    }
+
+    // A genuine hard disconnect (not a timeout): surface it to the user and drive
+    // the full reconnection flow.
+    private suspend fun handleHardDisconnect(host: String, port: Int, password: String) {
+        _isConnected.value = false
+        _errorMessage.value = "Connection lost. Reconnecting..."
+        client.disconnect()
+        attemptReconnection(host, port, password)
     }
 
     // Fetches cover art on a dedicated connection + coroutine. Failures here

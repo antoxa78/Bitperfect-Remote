@@ -70,32 +70,39 @@ class MainActivity : ComponentActivity() {
             val accentLuminance = accent.luminance()
             // A very dark accent (e.g. black) makes accent-derived "on" colors
             // unreadable against the darkened containers, so fall back to the
-            // base scheme's theme-aware on-colors in that case.
+            // base scheme's theme-aware on-colors in that case. We use the
+            // neutral on-surface colors because the default Material 3 container
+            // on-colors carry a purple tint that becomes visible with a black
+            // accent.
             val isDarkAccent = accentLuminance <= 0.3f
-            // Pick the higher-contrast text color on solid accent surfaces. The
-            // blind crossover is ~0.18 lum, but 0.3 keeps the darker blue/indigo/
-            // purple on white while flipping light/medium tones like neon and teal
-            // to black (white on teal is only ~2.5:1, barely readable).
-            val onAccent = if (isDarkAccent) baseScheme.onPrimary else if (accentLuminance > 0.3f) Color.Black else Color.White
+            // Pick the higher-contrast text/icon color on solid accent surfaces.
+            // A dark accent (lum <= 0.3, e.g. black) always needs white on top in
+            // both light and dark themes. Bright/medium accents get black. The
+            // blind crossover is ~0.18 lum, but 0.3 keeps darker blue/indigo/purple
+            // on white while flipping light/medium tones like neon and teal to
+            // black (white on the base scheme's onPrimary is a dark purple in dark
+            // mode, which would be invisible on a solid black accent).
+            val onAccent = if (isDarkAccent) Color.White else Color.Black
+            val onContainerFallback = baseScheme.onSurface
 
             MaterialTheme(
                 colorScheme = baseScheme.copy(
                     primary = accent,
                     onPrimary = onAccent,
                     primaryContainer = accent.copy(alpha = primaryContainerTint),
-                    onPrimaryContainer = if (isDarkAccent) baseScheme.onPrimaryContainer else accent.copy(alpha = 0.95f),
+                    onPrimaryContainer = if (isDarkAccent) onContainerFallback else accent.copy(alpha = 0.95f),
                     secondary = accent,
                     onSecondary = onAccent,
                     secondaryContainer = accent.copy(alpha = secondaryContainerTint),
-                    onSecondaryContainer = if (isDarkAccent) baseScheme.onSecondaryContainer else accent.copy(alpha = 0.9f),
+                    onSecondaryContainer = if (isDarkAccent) onContainerFallback else accent.copy(alpha = 0.9f),
                     surface = baseScheme.surface.blendWith(accent, surfaceTint),
                     onSurface = baseScheme.onSurface,
                     surfaceVariant = baseScheme.surfaceVariant.blendWith(accent, surfaceVariantTint),
-                    onSurfaceVariant = if (isDarkAccent) baseScheme.onSurfaceVariant else baseScheme.onSurfaceVariant.blendWith(accent, 0.35f),
+                    onSurfaceVariant = if (isDarkAccent) onContainerFallback.copy(alpha = 0.74f) else baseScheme.onSurfaceVariant.blendWith(accent, 0.35f),
                     background = baseScheme.background.blendWith(accent, surfaceTint),
                     onBackground = baseScheme.onBackground,
-                    outline = if (isDarkAccent) baseScheme.outline else accent.copy(alpha = 0.4f),
-                    outlineVariant = if (isDarkAccent) baseScheme.outlineVariant else accent.copy(alpha = 0.2f)
+                    outline = if (isDarkAccent) onContainerFallback.copy(alpha = 0.38f) else accent.copy(alpha = 0.4f),
+                    outlineVariant = if (isDarkAccent) onContainerFallback.copy(alpha = 0.16f) else accent.copy(alpha = 0.2f)
                 )
             ) {
                 Surface(

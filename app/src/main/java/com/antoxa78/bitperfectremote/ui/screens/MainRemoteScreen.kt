@@ -38,6 +38,7 @@ import com.antoxa78.bitperfectremote.data.PlayerStatus
 import com.antoxa78.bitperfectremote.data.QueueItem
 import com.antoxa78.bitperfectremote.data.TrackInfo
 import com.antoxa78.bitperfectremote.ui.PlayerViewModel
+import com.antoxa78.bitperfectremote.ui.onSurfaceAccentColor
 import kotlinx.coroutines.launch
 
 private fun Color.luminance(): Float =
@@ -84,7 +85,7 @@ fun MainRemoteScreen(
                     Text(
                         text = "Bitperfect Remote",
                         style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold),
-                        color = MaterialTheme.colorScheme.primary
+                        color = onSurfaceAccentColor()
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
@@ -500,7 +501,7 @@ fun NowPlayingTab(viewModel: PlayerViewModel, status: PlayerStatus, song: TrackI
                 Text(
                     text = if (song.artist.isBlank()) "Bitperfect MPD" else song.artist,
                     style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.primary,
+                    color = onSurfaceAccentColor(),
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     textAlign = TextAlign.Center,
@@ -562,14 +563,14 @@ fun NowPlayingTab(viewModel: PlayerViewModel, status: PlayerStatus, song: TrackI
                 Icon(
                     imageVector = Icons.Default.Repeat,
                     contentDescription = "Repeat",
-                    tint = if (status.repeat) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                    tint = if (status.repeat) onSurfaceAccentColor() else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
                 )
             }
             IconButton(onClick = { viewModel.toggleShuffle() }) {
                 Icon(
                     imageVector = Icons.Default.Shuffle,
                     contentDescription = "Shuffle",
-                    tint = if (status.random) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                    tint = if (status.random) onSurfaceAccentColor() else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
                 )
             }
         }
@@ -632,7 +633,7 @@ fun QueueTab(viewModel: PlayerViewModel, playlist: List<QueueItem>, currentSongI
                 Text(
                     text = "UP NEXT",
                     style = MaterialTheme.typography.labelLarge.copy(letterSpacing = 1.sp),
-                    color = MaterialTheme.colorScheme.primary,
+                    color = onSurfaceAccentColor(),
                     modifier = Modifier.padding(bottom = 8.dp, start = 4.dp)
                 )
             }
