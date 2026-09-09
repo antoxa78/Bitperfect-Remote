@@ -17,6 +17,8 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.antoxa78.bitperfectremote.ui.PlayerViewModel
+import com.antoxa78.bitperfectremote.ui.accentColor
+import com.antoxa78.bitperfectremote.ui.luminance
 import com.antoxa78.bitperfectremote.ui.screens.ConnectionScreen
 import com.antoxa78.bitperfectremote.ui.screens.MainRemoteScreen
 import com.antoxa78.bitperfectremote.ui.screens.MusicBrowserScreen
@@ -168,10 +170,6 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-private fun Color.luminance(): Float {
-    return 0.2126f * red + 0.7152f * green + 0.0722f * blue
-}
-
 private fun Color.blendWith(other: Color, ratio: Float): Color {
     val r = ratio.coerceIn(0f, 1f)
     return Color(
@@ -180,15 +178,4 @@ private fun Color.blendWith(other: Color, ratio: Float): Color {
         blue = blue * (1 - r) + other.blue * r,
         alpha = alpha * (1 - r) + other.alpha * r
     )
-}
-
-// Accent color palette selectable from the Application Themes menu.
-fun accentColor(key: String): Color = when (key) {
-    "neon" -> Color(0xFF00F0FF)
-    "black" -> Color(0xFF000000)
-    "purple" -> Color(0xFF8B5CF6)
-    "teal" -> Color(0xFF14B8A6)
-    "pink" -> Color(0xFFEC4899)
-    "indigo" -> Color(0xFF6366F1)
-    else -> Color(0xFF3B82F6) // blue (default)
 }

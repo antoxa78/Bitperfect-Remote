@@ -31,6 +31,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import java.util.Locale
+import kotlin.math.roundToInt
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.antoxa78.bitperfectremote.BuildConfig
@@ -38,21 +39,10 @@ import com.antoxa78.bitperfectremote.data.PlayerStatus
 import com.antoxa78.bitperfectremote.data.QueueItem
 import com.antoxa78.bitperfectremote.data.TrackInfo
 import com.antoxa78.bitperfectremote.ui.PlayerViewModel
+import com.antoxa78.bitperfectremote.ui.accentColorPalette
+import com.antoxa78.bitperfectremote.ui.luminance
 import com.antoxa78.bitperfectremote.ui.onSurfaceAccentColor
 import kotlinx.coroutines.launch
-
-private fun Color.luminance(): Float =
-    0.2126f * red + 0.7152f * green + 0.0722f * blue
-
-private val themeColors = listOf(
-    "blue" to Color(0xFF3B82F6),
-    "neon" to Color(0xFF00F0FF),
-    "black" to Color(0xFF000000),
-    "purple" to Color(0xFF8B5CF6),
-    "teal" to Color(0xFF14B8A6),
-    "pink" to Color(0xFFEC4899),
-    "indigo" to Color(0xFF6366F1)
-)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -191,7 +181,7 @@ fun MainRemoteScreen(
                             modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
                             horizontalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
-                            themeColors.forEach { (key, color) ->
+                            accentColorPalette.forEach { (key, color) ->
                                 val selected = viewModel.themeColor == key
                                 Box(
                                     modifier = Modifier
@@ -470,14 +460,14 @@ fun NowPlayingTab(viewModel: PlayerViewModel, status: PlayerStatus, song: TrackI
                                 modifier = Modifier.fillMaxSize(),
                                 contentScale = ContentScale.Crop
                             )
-                } else {
-                    Icon(
-                        Icons.Default.MusicNote,
-                        contentDescription = null,
-                        modifier = Modifier.fillMaxSize(0.45f),
-                        tint = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.45f)
-                    )
-                }
+                        } else {
+                            Icon(
+                                Icons.Default.MusicNote,
+                                contentDescription = null,
+                                modifier = Modifier.fillMaxSize(0.45f),
+                                tint = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.45f)
+                            )
+                        }
                     }
                 }
             }
@@ -573,6 +563,37 @@ fun NowPlayingTab(viewModel: PlayerViewModel, status: PlayerStatus, song: TrackI
                     tint = if (status.random) onSurfaceAccentColor() else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
                 )
             }
+        }
+
+        // Volume
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(bottom = 4.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                imageVector = when {
+                    status.volume <= 0 -> Icons.Default.VolumeOff
+                    status.volume < 50 -> Icons.Default.VolumeDown
+                    else -> Icons.Default.VolumeUp
+                },
+                contentDescription = "Volume",
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(20.dp)
+            )
+            Slider(
+                value = (status.volume / 100f).coerceIn(0f, 1f),
+                onValueChange = { newValue ->
+                    viewModel.setVolume((newValue * 100).roundToInt().coerceIn(0, 100))
+                },
+                modifier = Modifier.weight(1f).padding(horizontal = 8.dp)
+            )
+            Text(
+                text = "${status.volume}%",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.widthIn(min = 36.dp),
+                textAlign = TextAlign.End
+            )
         }
 
         // Controls

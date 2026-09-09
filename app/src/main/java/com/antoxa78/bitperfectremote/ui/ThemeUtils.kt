@@ -16,3 +16,20 @@ fun onSurfaceAccentColor(): Color =
         MaterialTheme.colorScheme.onSurface
     else
         MaterialTheme.colorScheme.primary
+
+// Single source of truth for the accent color palette selectable from the
+// Application Themes menu. MainActivity derives the app's MaterialTheme from
+// accentColor(key), and the theme picker swatches in MainRemoteScreen are
+// built from accentColorPalette, so the two can never drift out of sync.
+val accentColorPalette: List<Pair<String, Color>> = listOf(
+    "blue" to Color(0xFF3B82F6),
+    "neon" to Color(0xFF00F0FF),
+    "black" to Color(0xFF000000),
+    "purple" to Color(0xFF8B5CF6),
+    "teal" to Color(0xFF14B8A6),
+    "pink" to Color(0xFFEC4899),
+    "indigo" to Color(0xFF6366F1)
+)
+
+fun accentColor(key: String): Color =
+    accentColorPalette.firstOrNull { it.first == key }?.second ?: accentColorPalette.first().second

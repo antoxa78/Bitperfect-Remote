@@ -14,7 +14,6 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -24,17 +23,6 @@ import com.antoxa78.bitperfectremote.ui.onSurfaceAccentColor
 import com.antoxa78.bitperfectremote.ui.smbLabel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-
-// Directory icons use the accent color, but a dark accent (e.g. black) can be
-// invisible against a dark surface. Fall back to the theme's on-surface color so
-// the icon always contrasts with the background, while bright accents keep their
-// accent tint.
-@Composable
-private fun directoryIconTint(): Color =
-    if (MaterialTheme.colorScheme.primary.luminance() < 0.3f)
-        MaterialTheme.colorScheme.onSurface
-    else
-        MaterialTheme.colorScheme.primary
 
 // Keep absolute paths intact; only trim stray whitespace and trailing slashes.
 private fun normalizePath(path: String): String =
@@ -62,9 +50,6 @@ private fun mapRootStorageNames(entries: List<BrowseEntry>): List<BrowseEntry> {
         }
     }
 }
-
-private fun Color.luminance(): Float =
-    0.2126f * red + 0.7152f * green + 0.0722f * blue
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
@@ -345,7 +330,7 @@ fun MusicBrowserScreen(viewModel: PlayerViewModel, onBack: () -> Unit) {
                                             else -> Icons.Default.Folder
                                         },
                                         contentDescription = null,
-                                        tint = if (entry.isDirectory) directoryIconTint() else MaterialTheme.colorScheme.onSurfaceVariant
+                                        tint = if (entry.isDirectory) onSurfaceAccentColor() else MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                 },
                                 trailingContent = {

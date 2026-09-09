@@ -205,7 +205,10 @@ class MpdClient(private val readTimeoutMs: Int = DEFAULT_READ_TIMEOUT_MS) {
         var totalRead = 0
         while (totalRead < chunkSize) {
             val read = bis.read(buffer, totalRead, chunkSize - totalRead)
-            if (read == -1) break
+            // Connection closed mid-chunk: the buffer would be zero-padded past
+            // `totalRead`, which is indistinguishable from real (silent) audio
+            // data. Fail the whole chunk rather than returning corrupted artwork.
+            if (read == -1) return null
             totalRead += read
         }
 

@@ -9,9 +9,14 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Dns
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Router
 import androidx.compose.material.icons.filled.Save
+import androidx.compose.material.icons.filled.Storage
+import androidx.compose.material.icons.filled.Tag
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -86,7 +91,9 @@ fun SettingsScreen(viewModel: PlayerViewModel, onBack: () -> Unit) {
                 label = { Text("Server Name (Optional)") },
                 placeholder = { Text("e.g. Living Room") },
                 singleLine = true,
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(12.dp),
+                leadingIcon = { Icon(Icons.Default.Storage, contentDescription = null) }
             )
 
             Spacer(modifier = Modifier.height(12.dp))
@@ -97,6 +104,8 @@ fun SettingsScreen(viewModel: PlayerViewModel, onBack: () -> Unit) {
                 label = { Text("Player IP Address") },
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(12.dp),
+                leadingIcon = { Icon(Icons.Default.Dns, contentDescription = null) },
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri)
             )
 
@@ -108,6 +117,8 @@ fun SettingsScreen(viewModel: PlayerViewModel, onBack: () -> Unit) {
                 label = { Text("MPD Port") },
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(12.dp),
+                leadingIcon = { Icon(Icons.Default.Tag, contentDescription = null) },
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
             )
 
@@ -119,6 +130,8 @@ fun SettingsScreen(viewModel: PlayerViewModel, onBack: () -> Unit) {
                 label = { Text("MPD Password") },
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(12.dp),
+                leadingIcon = { Icon(Icons.Default.Lock, contentDescription = null) },
                 visualTransformation = PasswordVisualTransformation(),
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password)
             )
@@ -152,7 +165,8 @@ fun SettingsScreen(viewModel: PlayerViewModel, onBack: () -> Unit) {
                     viewModel.connect(ipAddress.trim(), p, password, true, serverName.trim())
                 },
                 enabled = !isConnecting,
-                modifier = Modifier.fillMaxWidth().height(50.dp)
+                modifier = Modifier.fillMaxWidth().height(50.dp),
+                shape = RoundedCornerShape(16.dp)
             ) {
                 if (isConnecting) {
                     CircularProgressIndicator(
@@ -235,6 +249,19 @@ private fun ServerListItem(
                 .padding(horizontal = 16.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
+            Surface(
+                modifier = Modifier.size(40.dp),
+                shape = RoundedCornerShape(12.dp),
+                color = if (isActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.secondaryContainer,
+                contentColor = if (isActive) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSecondaryContainer
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(Icons.Default.Router, contentDescription = null, modifier = Modifier.size(20.dp))
+                }
+            }
+
+            Spacer(modifier = Modifier.width(12.dp))
+
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = server.name.ifBlank { server.ip },
