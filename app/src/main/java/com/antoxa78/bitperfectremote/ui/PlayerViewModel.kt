@@ -2,6 +2,7 @@ package com.antoxa78.bitperfectremote.ui
 
 import android.app.Application
 import android.content.Context
+import android.util.Log
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
@@ -37,6 +38,10 @@ data class MpdServer(
 }
 
 class PlayerViewModel(application: Application) : AndroidViewModel(application) {
+    private companion object {
+        const val TAG = "PlayerViewModel"
+    }
+
     val client = MpdClient()
     // Separate connection used only for album art, so a slow/hanging artwork
     // request (e.g. online lookup on the server) never blocks status polling
@@ -490,6 +495,23 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
     fun playId(id: String) {
         safeAction {
             client.playId(id)
+        }
+    }
+
+    /**
+     * Removes one entry from the queue. Tries the id-based command first and falls
+     * back to the position-based one: the BitPerfect player answers `deleteid` for
+     * the currently playing song with a system error (ACK 52), which stock MPD
+     * does not do. The second attempt surfaces its own error if that fails too.
+     */
+    fun removeFromQueue(id: String, pos: Int) {
+        safeAction {
+            try {
+                client.deleteId(id)
+            } catch (e: Exception) {
+                Log.w(TAG, "deleteid $id failed (${e.message}); retrying as delete $pos")
+                client.deletePos(pos)
+            }
         }
     }
 

@@ -337,6 +337,12 @@ class MpdClient(private val readTimeoutMs: Int = DEFAULT_READ_TIMEOUT_MS) {
     suspend fun setVolume(vol: Int) = sendCommand("setvol $vol")
     suspend fun seek(pos: Float) = sendCommand("seekcur $pos")
     suspend fun playId(id: String) = sendCommand("playid $id")
+    // Removes a single entry from the queue. Uses the unique song id rather than
+    // "delete <pos>" because positions shift as soon as anything is removed.
+    suspend fun deleteId(id: String) = sendCommand("deleteid $id")
+    // Position-based counterpart of [deleteId], kept as a fallback: some players
+    // reject the id form for the currently playing song.
+    suspend fun deletePos(pos: Int) = sendCommand("delete $pos")
     suspend fun clear() = sendCommand("clear")
     suspend fun setRepeat(enable: Boolean) = sendCommand(if (enable) "repeat 1" else "repeat 0")
     suspend fun setRandom(enable: Boolean) = sendCommand(if (enable) "random 1" else "random 0")

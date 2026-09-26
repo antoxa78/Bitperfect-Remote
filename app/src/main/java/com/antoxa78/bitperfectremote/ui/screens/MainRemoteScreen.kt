@@ -710,6 +710,25 @@ fun QueueTab(viewModel: PlayerViewModel, playlist: List<QueueItem>, currentSongI
                                 overflow = TextOverflow.Ellipsis
                             )
                         }
+
+                        Spacer(modifier = Modifier.width(4.dp))
+
+                        // Removes this entry from the queue. It sits inside the clickable
+                        // card, so the tap is consumed here and the song isn't started.
+                        // The position is passed alongside the id as a fallback, since
+                        // the queue index is what the position-based delete needs.
+                        IconButton(
+                            onClick = {
+                                viewModel.removeFromQueue(item.id, if (item.pos >= 0) item.pos else index)
+                            }
+                        ) {
+                            Icon(
+                                Icons.Default.Remove,
+                                contentDescription = "Remove from queue",
+                                modifier = Modifier.size(20.dp),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
                     }
                 }
             }

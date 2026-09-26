@@ -18,6 +18,9 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.antoxa78.bitperfectremote.data.BrowseEntry
+import com.antoxa78.bitperfectremote.ui.ActionBarButtonHeight
+import com.antoxa78.bitperfectremote.ui.ActionBarButtonLabel
+import com.antoxa78.bitperfectremote.ui.ActionBarButtonPadding
 import com.antoxa78.bitperfectremote.ui.PlayerViewModel
 import com.antoxa78.bitperfectremote.ui.onSurfaceAccentColor
 import com.antoxa78.bitperfectremote.ui.smbLabel
@@ -193,36 +196,44 @@ fun MusicBrowserScreen(viewModel: PlayerViewModel, onBack: () -> Unit) {
                             .fillMaxWidth()
                             .windowInsetsPadding(WindowInsets.navigationBars)
                             .padding(horizontal = 12.dp, vertical = 10.dp),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
+                        // The three actions share one fixed height and an equal share of
+                        // the row, so the bar keeps the same size in both browser menus
+                        // and at every folder level. Going up one folder level is handled
+                        // by the top-bar back arrow and the system back button.
                         OutlinedButton(
-                            onClick = { navigateUp() },
+                            onClick = onBack,
                             colors = ButtonDefaults.outlinedButtonColors(
                                 contentColor = onSurfaceAccentColor()
                             ),
-                            modifier = Modifier.weight(1f)
+                            contentPadding = ActionBarButtonPadding,
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(ActionBarButtonHeight)
                         ) {
-                            Icon(Icons.Default.ArrowBack, contentDescription = null, modifier = Modifier.size(18.dp))
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text("Back")
+                            ActionBarButtonLabel("Player")
                         }
                         FilledTonalButton(
                             onClick = { queueCurrentFolder(replace = true) },
                             enabled = !isBusy,
-                            modifier = Modifier.weight(1f)
+                            contentPadding = ActionBarButtonPadding,
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(ActionBarButtonHeight)
                         ) {
-                            Icon(Icons.Default.PlaylistRemove, contentDescription = null, modifier = Modifier.size(18.dp))
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text("Replace All")
+                            ActionBarButtonLabel("Replace All")
                         }
                         Button(
                             onClick = { queueCurrentFolder(replace = false) },
                             enabled = !isBusy,
-                            modifier = Modifier.weight(1f)
+                            contentPadding = ActionBarButtonPadding,
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(ActionBarButtonHeight)
                         ) {
-                            Icon(Icons.Default.PlaylistAdd, contentDescription = null, modifier = Modifier.size(18.dp))
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text("Add to Playlist")
+                            ActionBarButtonLabel("Add to Playlist")
                         }
                     }
                 }
