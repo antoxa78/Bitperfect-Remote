@@ -18,6 +18,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.antoxa78.bitperfectremote.data.BrowseEntry
+import com.antoxa78.bitperfectremote.data.MpdCommandException
 import com.antoxa78.bitperfectremote.ui.ActionBarButtonHeight
 import com.antoxa78.bitperfectremote.ui.ActionBarButtonLabel
 import com.antoxa78.bitperfectremote.ui.ActionBarButtonPadding
@@ -102,6 +103,11 @@ fun NetworkSharesScreen(viewModel: PlayerViewModel, onBack: () -> Unit) {
                 loaded
             }
             loadError = null
+        } catch (e: MpdCommandException) {
+            // The server refused the listing: it is connected, so show the reason as-is
+            // instead of treating this as a lost connection.
+            entries = emptyList()
+            loadError = e.reason
         } catch (e: Exception) {
             if (e.message?.contains("closed", true) == true || e.message?.contains("Connection", true) == true) {
                 scope.launch {
@@ -336,7 +342,7 @@ fun NetworkSharesScreen(viewModel: PlayerViewModel, onBack: () -> Unit) {
                                             scope.launch {
                                                 isAdding = true
                                                 try {
-                                                    libraryClient.addUri(entry.file)
+                                                    libraryClient.addUri(entry.file, entry.isStoredPlaylist)
                                                     snackbarMessage = "Added to queue"
                                                 } catch (e: Exception) {
                                                     snackbarMessage = "Add failed: ${e.message}"
@@ -367,7 +373,7 @@ fun NetworkSharesScreen(viewModel: PlayerViewModel, onBack: () -> Unit) {
                                             scope.launch {
                                                 isAdding = true
                                                 try {
-                                                    libraryClient.loadFolderToQueue(entry.file, replace = true)
+                                                    libraryClient.loadFolderToQueue(entry.file, replace = true, storedPlaylist = entry.isStoredPlaylist)
                                                     snackbarMessage = "Playing ${entry.title}"
                                                 } catch (e: Exception) {
                                                     snackbarMessage = "Failed: ${e.message}"
@@ -435,7 +441,7 @@ fun NetworkSharesScreen(viewModel: PlayerViewModel, onBack: () -> Unit) {
                                     scope.launch {
                                         isAdding = true
                                         try {
-                                            libraryClient.loadFolderToQueue(folder.file, replace = false)
+                                            libraryClient.loadFolderToQueue(folder.file, replace = false, storedPlaylist = folder.isStoredPlaylist)
                                             snackbarMessage = "Added to playlist"
                                         } catch (e: Exception) {
                                             snackbarMessage = "Failed: ${e.message}"
@@ -458,7 +464,7 @@ fun NetworkSharesScreen(viewModel: PlayerViewModel, onBack: () -> Unit) {
                                     scope.launch {
                                         isAdding = true
                                         try {
-                                            libraryClient.loadFolderToQueue(folder.file, replace = true)
+                                            libraryClient.loadFolderToQueue(folder.file, replace = true, storedPlaylist = folder.isStoredPlaylist)
                                             snackbarMessage = "Replaced playlist"
                                         } catch (e: Exception) {
                                             snackbarMessage = "Failed: ${e.message}"

@@ -3,6 +3,9 @@ package com.antoxa78.bitperfectremote.data
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
+/** Raised when the player cannot expand a playlist file that the browser listed. */
+class PlaylistNotReadableException(message: String) : Exception(message)
+
 class MpdLibraryClient(private val client: MpdClient) {
 
     // The Bitperfect MPD server rejects relative paths ("relative paths not supported").
@@ -15,12 +18,31 @@ class MpdLibraryClient(private val client: MpdClient) {
         return if (trimmed.startsWith("/")) trimmed else "/$trimmed"
     }
 
-    // Playlist files (*.m3u, *.m3u8, *.pls) are not directly playable audio: MPD
-    // must load their contents into the queue via the "load" command. Sending them
-    // through "add" yields an "not playable file" server error.
+    // Playlist files (*.m3u, *.m3u8, *.pls) are not directly playable audio: their
+    // contents have to be expanded into the queue with the "load" command.
     private fun isPlaylistFile(path: String): Boolean {
         val lower = path.lowercase()
         return lower.endsWith(".m3u") || lower.endsWith(".m3u8") || lower.endsWith(".pls")
+    }
+
+    // "load" is the only command that expands a playlist into queue entries, but MPD can
+    // only do so for playlists it is able to open. Names in the playlist directory always
+    // work, and since the playlist plugins of MPD 0.24 so do paths in the music directory.
+    // A remote URI additionally needs an input plugin for that scheme, which players with
+    // built-in share support (Bitperfect) do not provide: they answer "No such playlist"
+    // for a share they otherwise browse and play from without trouble. Report that as the
+    // limitation it is instead of letting the raw protocol line reach the user.
+    private suspend fun loadPlaylist(name: String) {
+        try {
+            client.sendCommand("load \"$name\"")
+        } catch (e: MpdCommandException) {
+            if (e.isNoSuchFile && name.contains("://")) {
+                throw PlaylistNotReadableException(
+                    "Player can't read playlists from network shares"
+                )
+            }
+            throw e
+        }
     }
 
     suspend fun lsinfo(path: String = ""): List<BrowseEntry> = withContext(Dispatchers.IO) {
@@ -34,18 +56,34 @@ class MpdLibraryClient(private val client: MpdClient) {
         var currArtist = ""
         var currAlbum = ""
         var isDir = false
+        var isStoredPlaylist = false
+
+        fun flush() {
+            if (currFile.isNotEmpty()) {
+                entries.add(
+                    BrowseEntry(
+                        currFile,
+                        currTitle.ifEmpty { currFile.substringAfterLast('/') },
+                        currArtist,
+                        currAlbum,
+                        isDir,
+                        isStoredPlaylist
+                    )
+                )
+            }
+            currFile = ""; currTitle = ""; currArtist = ""; currAlbum = ""
+            isDir = false; isStoredPlaylist = false
+        }
 
         for (line in lines) {
             val parts = line.split(": ", limit = 2)
             if (parts.size == 2) {
                 when (parts[0].lowercase()) {
                     "file", "directory", "playlist" -> {
-                        if (currFile.isNotEmpty()) {
-                            entries.add(BrowseEntry(currFile, currTitle.ifEmpty { currFile.substringAfterLast('/') }, currArtist, currAlbum, isDir))
-                            currFile = ""; currTitle = ""; currArtist = ""; currAlbum = ""; isDir = false
-                        }
+                        flush()
                         currFile = parts[1]
                         isDir = parts[0].lowercase() == "directory"
+                        isStoredPlaylist = parts[0].lowercase() == "playlist"
                     }
                     "title" -> currTitle = parts[1]
                     "artist" -> currArtist = parts[1]
@@ -53,36 +91,52 @@ class MpdLibraryClient(private val client: MpdClient) {
                 }
             }
         }
-        if (currFile.isNotEmpty()) {
-            entries.add(BrowseEntry(currFile, currTitle.ifEmpty { currFile.substringAfterLast('/') }, currArtist, currAlbum, isDir))
-        }
+        flush()
         entries
     }
 
-    suspend fun addUri(uri: String) = withContext(Dispatchers.IO) {
-        val abs = toAbsolutePath(uri)
-        if (isPlaylistFile(uri)) {
-            client.sendCommand("load \"$abs\"")
-        } else {
-            client.sendCommand("add \"$abs\"")
+    /**
+     * Queues one browsed entry. [storedPlaylist] marks entries the server reported as
+     * "playlist:" in lsinfo: those live in the playlist directory and are addressed by
+     * bare name, so they must not be turned into a path the way song URIs are.
+     */
+    suspend fun addUri(uri: String, storedPlaylist: Boolean = false) = withContext(Dispatchers.IO) {
+        when {
+            storedPlaylist -> loadPlaylist(uri)
+            isPlaylistFile(uri) -> loadPlaylist(toAbsolutePath(uri))
+            else -> client.sendCommand("add \"${toAbsolutePath(uri)}\"")
         }
     }
 
-    suspend fun loadFolderToQueue(uri: String, replace: Boolean) = withContext(Dispatchers.IO) {
+    /**
+     * Queues [uri], replacing the current queue when [replace] is set. The new entries are
+     * queued first and the previous ones dropped afterwards, so a rejected URI (an
+     * unreadable playlist, an unreachable share) leaves the existing queue intact instead
+     * of clearing it and only then failing.
+     *
+     * The old entries are removed only if they are verifiably still at the front of the
+     * queue. Standard MPD appends on "load"/"add", but a server that replaces the queue on
+     * "load" would otherwise have "delete 0:N" cut the first N songs of the freshly
+     * loaded playlist (all of them when the old queue was at least as long).
+     */
+    suspend fun loadFolderToQueue(
+        uri: String,
+        replace: Boolean,
+        storedPlaylist: Boolean = false
+    ) = withContext(Dispatchers.IO) {
+        val previous = if (replace) client.getQueueSnapshot() else emptyList()
+        addUri(uri, storedPlaylist)
         if (replace) {
-            client.clear()
-        }
-        val abs = toAbsolutePath(uri)
-        if (isPlaylistFile(uri)) {
-            // Load a playlist file's contents rather than trying to add it as audio.
-            client.sendCommand("load \"$abs\"")
-        } else {
-            // MPD add command adds all files in directory recursively if uri is a directory
-            client.sendCommand("add \"$abs\"")
-        }
-        // Only start playback when replacing the queue; "Add to Playlist" (replace=false)
-        // should queue silently without interrupting or starting playback.
-        if (replace) {
+            if (previous.isNotEmpty()) {
+                val current = client.getQueueSnapshot()
+                val appended = current.size > previous.size &&
+                    current.subList(0, previous.size) == previous
+                if (appended) {
+                    client.deleteRange(0, previous.size)
+                }
+            }
+            // Only start playback when replacing the queue; "Add to Playlist" (replace=false)
+            // should queue silently without interrupting or starting playback.
             client.play()
         }
     }

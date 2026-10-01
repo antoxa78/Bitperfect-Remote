@@ -11,6 +11,54 @@ import java.net.Socket
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
+/**
+ * A command the server refused. MPD reports failures with a single line of the form
+ * `ACK [error@commandListNum] {command} message`, e.g.
+ * `ACK [50@0] {load} No such playlist`. Callers need the numeric code to react to a
+ * specific failure, and the UI needs the message text rather than the protocol line, so
+ * both are parsed out here.
+ */
+class MpdCommandException(
+    /** MPD's numeric error code, or -1 if the line did not carry one. */
+    val errorCode: Int,
+    /** The command MPD was executing, e.g. "load". Empty if not reported. */
+    val command: String,
+    /** The server's own wording for the failure, e.g. "No such playlist". */
+    val reason: String,
+    /** The untouched line, for logging. */
+    val rawLine: String
+) : Exception(reason.ifBlank { rawLine }) {
+
+    /** The server found no such file, directory or playlist (ACK_ERROR_NO_EXIST). */
+    val isNoSuchFile: Boolean get() = errorCode == ERROR_NO_EXIST
+
+    companion object {
+        const val ERROR_NO_EXIST = 50
+
+        fun parse(line: String): MpdCommandException {
+            var rest = line.trim().removePrefix("ACK").trim()
+            var code = -1
+            val open = rest.indexOf('[')
+            if (open >= 0) {
+                val close = rest.indexOf(']', open)
+                if (close > open) {
+                    code = rest.substring(open + 1, close).substringBefore('@').trim().toIntOrNull() ?: -1
+                    rest = rest.substring(close + 1).trim()
+                }
+            }
+            var command = ""
+            if (rest.startsWith("{")) {
+                val close = rest.indexOf('}')
+                if (close > 0) {
+                    command = rest.substring(1, close).trim()
+                    rest = rest.substring(close + 1).trim()
+                }
+            }
+            return MpdCommandException(code, command, rest, line)
+        }
+    }
+}
+
 class MpdClient(private val readTimeoutMs: Int = DEFAULT_READ_TIMEOUT_MS) {
     companion object {
         private const val TAG = "MpdClient"
@@ -127,7 +175,11 @@ class MpdClient(private val readTimeoutMs: Int = DEFAULT_READ_TIMEOUT_MS) {
                 val line = readLine(bis)
                 if (line == "OK") break
                 if (line.startsWith("ACK")) {
-                    throw Exception("MPD Error: $line")
+                    // A rejected command means the server is alive and reachable, so
+                    // callers must not mistake it for a dropped connection.
+                    val ack = MpdCommandException.parse(line)
+                    Log.w(TAG, "Command rejected: $command -> ${ack.rawLine}")
+                    throw ack
                 }
                 lines.add(line)
             }
@@ -328,6 +380,30 @@ class MpdClient(private val readTimeoutMs: Int = DEFAULT_READ_TIMEOUT_MS) {
         items
     }
 
+    // The queue as (Id, file) pairs in queue order. Song ids are assigned per queue entry,
+    // so comparing two snapshots tells "the old entries are still at the front" apart from
+    // "the queue was replaced", even when the same files were loaded again.
+    suspend fun getQueueSnapshot(): List<Pair<String, String>> = withContext(Dispatchers.IO) {
+        val lines = sendCommand("playlistinfo")
+        val entries = mutableListOf<Pair<String, String>>()
+        var currFile = ""
+        for (line in lines) {
+            val parts = line.split(": ", limit = 2)
+            if (parts.size != 2) continue
+            when (parts[0].lowercase()) {
+                "file" -> currFile = parts[1]
+                // "Id" closes each song record in MPD's playlistinfo output.
+                "id" -> entries.add(parts[1] to currFile)
+            }
+        }
+        entries
+    }
+
+    // Removes the queue range [start, endExclusive). MPD ranges include the start and
+    // exclude the end, so this drops positions start until endExclusive - 1.
+    suspend fun deleteRange(start: Int, endExclusive: Int) =
+        sendCommand("delete $start:$endExclusive")
+
     suspend fun play() = sendCommand("play")
     suspend fun pause() = sendCommand("pause 1")
     suspend fun resume() = sendCommand("pause 0")
@@ -343,7 +419,6 @@ class MpdClient(private val readTimeoutMs: Int = DEFAULT_READ_TIMEOUT_MS) {
     // Position-based counterpart of [deleteId], kept as a fallback: some players
     // reject the id form for the currently playing song.
     suspend fun deletePos(pos: Int) = sendCommand("delete $pos")
-    suspend fun clear() = sendCommand("clear")
     suspend fun setRepeat(enable: Boolean) = sendCommand(if (enable) "repeat 1" else "repeat 0")
     suspend fun setRandom(enable: Boolean) = sendCommand(if (enable) "random 1" else "random 0")
 }

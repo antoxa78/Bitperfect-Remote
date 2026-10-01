@@ -18,6 +18,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.antoxa78.bitperfectremote.data.BrowseEntry
+import com.antoxa78.bitperfectremote.data.MpdCommandException
 import com.antoxa78.bitperfectremote.ui.ActionBarButtonHeight
 import com.antoxa78.bitperfectremote.ui.ActionBarButtonLabel
 import com.antoxa78.bitperfectremote.ui.ActionBarButtonPadding
@@ -130,6 +131,11 @@ fun MusicBrowserScreen(viewModel: PlayerViewModel, onBack: () -> Unit) {
             val loaded = libraryClient.lsinfo(currentPath)
             entries = if (currentPath.isEmpty()) mapRootStorageNames(loaded) else loaded
             loadError = null
+        } catch (e: MpdCommandException) {
+            // The server refused the listing: it is connected, so show the reason as-is
+            // instead of treating this as a lost connection.
+            entries = emptyList()
+            loadError = e.reason
         } catch (e: Exception) {
             // If the browser connection dropped, reconnect in the background
             // and retry automatically instead of showing a stale error.
@@ -349,7 +355,7 @@ fun MusicBrowserScreen(viewModel: PlayerViewModel, onBack: () -> Unit) {
                                         IconButton(onClick = {
                                             scope.launch {
                                                 try {
-                                                    libraryClient.addUri(entry.file)
+                                                    libraryClient.addUri(entry.file, entry.isStoredPlaylist)
                                                     snackbarMessage = "Added to queue"
                                                 } catch (e: Exception) {
                                                     snackbarMessage = "Add failed: ${e.message}"
@@ -370,7 +376,7 @@ fun MusicBrowserScreen(viewModel: PlayerViewModel, onBack: () -> Unit) {
                                             // Default: replace the playlist and play the selected file.
                                             scope.launch {
                                                 try {
-                                                    libraryClient.loadFolderToQueue(entry.file, replace = true)
+                                                    libraryClient.loadFolderToQueue(entry.file, replace = true, storedPlaylist = entry.isStoredPlaylist)
                                                     snackbarMessage = "Playing ${entry.title}"
                                                 } catch (e: Exception) {
                                                     snackbarMessage = "Failed: ${e.message}"
@@ -436,7 +442,7 @@ fun MusicBrowserScreen(viewModel: PlayerViewModel, onBack: () -> Unit) {
                                 onClick = {
                                     scope.launch {
                                         try {
-                                            libraryClient.loadFolderToQueue(folder.file, replace = false)
+                                            libraryClient.loadFolderToQueue(folder.file, replace = false, storedPlaylist = folder.isStoredPlaylist)
                                             snackbarMessage = "Added folder to playlist"
                                         } catch (e: Exception) {
                                             snackbarMessage = "Failed: ${e.message}"
@@ -456,7 +462,7 @@ fun MusicBrowserScreen(viewModel: PlayerViewModel, onBack: () -> Unit) {
                                 onClick = {
                                     scope.launch {
                                         try {
-                                            libraryClient.loadFolderToQueue(folder.file, replace = true)
+                                            libraryClient.loadFolderToQueue(folder.file, replace = true, storedPlaylist = folder.isStoredPlaylist)
                                             snackbarMessage = "Replaced playlist with folder"
                                         } catch (e: Exception) {
                                             snackbarMessage = "Failed: ${e.message}"
