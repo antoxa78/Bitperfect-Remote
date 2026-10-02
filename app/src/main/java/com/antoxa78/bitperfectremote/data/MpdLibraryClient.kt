@@ -18,12 +18,14 @@ class MpdLibraryClient(private val client: MpdClient) {
         return if (trimmed.startsWith("/")) trimmed else "/$trimmed"
     }
 
-    // Playlist files (*.m3u, *.m3u8, *.pls) are not directly playable audio: their
-    // contents have to be expanded into the queue with the "load" command.
+    // Playlist/cue documents (*.m3u, *.m3u8, *.pls, *.cue) are not directly playable
+    // audio: their contents have to be expanded into the queue with the "load" command.
     private fun isPlaylistFile(path: String): Boolean {
         val lower = path.lowercase()
-        return lower.endsWith(".m3u") || lower.endsWith(".m3u8") || lower.endsWith(".pls")
+        return lower.endsWith(".m3u") || lower.endsWith(".m3u8") || lower.endsWith(".pls") || lower.endsWith(".cue")
     }
+
+    private fun isCueSheet(path: String): Boolean = path.lowercase().endsWith(".cue")
 
     // "load" is the only command that expands a playlist into queue entries, but MPD can
     // only do so for playlists it is able to open. Names in the playlist directory always
@@ -92,7 +94,72 @@ class MpdLibraryClient(private val client: MpdClient) {
             }
         }
         flush()
+
+        // MPD's database, which lsinfo reads, hides cue sheets: a .cue file is turned
+        // into virtual tracks of the audio file it references, and the .cue document
+        // itself never appears in the listing. listfiles reports every file on disk,
+        // so merge the cue sheets it finds back in to make them browsable.
+        val listedFiles = entries.mapTo(HashSet()) { it.file }
+        for (cueSheet in listCueSheets(absPath)) {
+            if (cueSheet.file !in listedFiles) {
+                entries.add(cueSheet)
+            }
+        }
         entries
+    }
+
+    // Lists the directory with the "listfiles" command -- which, unlike the
+    // database-backed lsinfo, returns every file on disk -- and keeps only the cue
+    // sheets, the one kind of music document MPD deliberately omits from the database.
+    private suspend fun listCueSheets(absPath: String): List<BrowseEntry> {
+        val cmd = if (absPath.isEmpty()) "listfiles" else "listfiles \"$absPath\""
+        val lines = try {
+            client.sendCommand(cmd)
+        } catch (e: Exception) {
+            // The server may not implement listfiles. The lsinfo listing above already
+            // succeeded, so browsing must continue without the extra cue sheets.
+            emptyList()
+        }
+
+        val cueSheets = mutableListOf<BrowseEntry>()
+        var currFile = ""
+        var isDirectory = false
+        fun flush() {
+            if (currFile.isNotEmpty() && !isDirectory && isCueSheet(currFile)) {
+                cueSheets.add(
+                    BrowseEntry(
+                        currFile,
+                        currFile.substringAfterLast('/'),
+                        "",
+                        "",
+                        false,
+                        false
+                    )
+                )
+            }
+            currFile = ""
+            isDirectory = false
+        }
+        for (line in lines) {
+            val parts = line.split(": ", limit = 2)
+            if (parts.size == 2) {
+                when (parts[0].lowercase()) {
+                    "file" -> {
+                        flush()
+                        currFile = parts[1]
+                    }
+                    "directory" -> {
+                        flush()
+                        currFile = parts[1]
+                        isDirectory = true
+                    }
+                    // Ignore trailing attributes such as "size" and "Last-Modified",
+                    // which belong to the entry above them.
+                }
+            }
+        }
+        flush()
+        return cueSheets
     }
 
     /**
