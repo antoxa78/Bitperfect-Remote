@@ -1,5 +1,7 @@
 # Bitperfect Remote
 
+[![Donate with PayPal](https://img.shields.io/badge/Donate-PayPal-00457C?style=for-the-badge&logo=paypal&logoColor=white)](https://www.paypal.me/antoxab1978)
+
 A modern, fast, and feature-rich Android remote control for BitPerfect Player and [Music Player Daemon (MPD)](https://www.musicpd.org/).
 
 Built with **Kotlin** and **Jetpack Compose**.
