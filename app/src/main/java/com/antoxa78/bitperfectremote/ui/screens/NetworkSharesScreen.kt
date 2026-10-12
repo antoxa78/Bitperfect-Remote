@@ -9,6 +9,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -41,7 +42,8 @@ fun NetworkSharesScreen(viewModel: PlayerViewModel, onBack: () -> Unit) {
 
     var entries by remember { mutableStateOf<List<BrowseEntry>>(emptyList()) }
     var isLoading by remember { mutableStateOf(true) }
-    var isAdding by remember { mutableStateOf(false) }
+    // File/folder currently being queued, so only that row shows a spinner.
+    var addingFile by remember { mutableStateOf<String?>(null) }
     var isBusy by remember { mutableStateOf(false) }
     var loadError by remember { mutableStateOf<String?>(null) }
     var snackbarMessage by remember { mutableStateOf<String?>(null) }
@@ -152,7 +154,14 @@ fun NetworkSharesScreen(viewModel: PlayerViewModel, onBack: () -> Unit) {
                 },
                 navigationIcon = {
                     IconButton(onClick = { navigateUp() }) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Back")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                    }
+                },
+                actions = {
+                    if (isConnected) {
+                        IconButton(onClick = { reloadTick++ }, enabled = !isLoading) {
+                            Icon(Icons.Default.Refresh, contentDescription = "Refresh")
+                        }
                     }
                 }
             )
@@ -189,7 +198,7 @@ fun NetworkSharesScreen(viewModel: PlayerViewModel, onBack: () -> Unit) {
                         }
                         FilledTonalButton(
                             onClick = { queueCurrentFolder(replace = true) },
-                            enabled = !isBusy,
+                            enabled = !isBusy && addingFile == null && currentPath.isNotEmpty(),
                             contentPadding = ActionBarButtonPadding,
                             modifier = Modifier
                                 .weight(1f)
@@ -199,7 +208,7 @@ fun NetworkSharesScreen(viewModel: PlayerViewModel, onBack: () -> Unit) {
                         }
                         Button(
                             onClick = { queueCurrentFolder(replace = false) },
-                            enabled = !isBusy,
+                            enabled = !isBusy && addingFile == null && currentPath.isNotEmpty(),
                             contentPadding = ActionBarButtonPadding,
                             modifier = Modifier
                                 .weight(1f)
@@ -340,18 +349,18 @@ fun NetworkSharesScreen(viewModel: PlayerViewModel, onBack: () -> Unit) {
                                     if (!entry.isDirectory) {
                                         IconButton(onClick = {
                                             scope.launch {
-                                                isAdding = true
+                                                addingFile = entry.file
                                                 try {
                                                     libraryClient.addUri(entry.file, entry.isStoredPlaylist)
                                                     snackbarMessage = "Added to queue"
                                                 } catch (e: Exception) {
                                                     snackbarMessage = "Add failed: ${e.message}"
                                                 } finally {
-                                                    isAdding = false
+                                                    addingFile = null
                                                 }
                                             }
                                         }) {
-                                            if (isAdding && !entry.isDirectory) {
+                                            if (addingFile == entry.file) {
                                                 CircularProgressIndicator(
                                                     modifier = Modifier.size(18.dp),
                                                     strokeWidth = 2.dp,
@@ -371,14 +380,14 @@ fun NetworkSharesScreen(viewModel: PlayerViewModel, onBack: () -> Unit) {
                                             openFolder(entry.file)
                                         } else {
                                             scope.launch {
-                                                isAdding = true
+                                                addingFile = entry.file
                                                 try {
                                                     libraryClient.loadFolderToQueue(entry.file, replace = true, storedPlaylist = entry.isStoredPlaylist)
                                                     snackbarMessage = "Playing ${entry.title}"
                                                 } catch (e: Exception) {
                                                     snackbarMessage = "Failed: ${e.message}"
                                                 } finally {
-                                                    isAdding = false
+                                                    addingFile = null
                                                 }
                                             }
                                         }
@@ -439,14 +448,14 @@ fun NetworkSharesScreen(viewModel: PlayerViewModel, onBack: () -> Unit) {
                             Button(
                                 onClick = {
                                     scope.launch {
-                                        isAdding = true
+                                        addingFile = folder.file
                                         try {
                                             libraryClient.loadFolderToQueue(folder.file, replace = false, storedPlaylist = folder.isStoredPlaylist)
                                             snackbarMessage = "Added to playlist"
                                         } catch (e: Exception) {
                                             snackbarMessage = "Failed: ${e.message}"
                                         } finally {
-                                            isAdding = false
+                                            addingFile = null
                                         }
                                     }
                                     selectedForDialog = null
@@ -462,14 +471,14 @@ fun NetworkSharesScreen(viewModel: PlayerViewModel, onBack: () -> Unit) {
                             FilledTonalButton(
                                 onClick = {
                                     scope.launch {
-                                        isAdding = true
+                                        addingFile = folder.file
                                         try {
                                             libraryClient.loadFolderToQueue(folder.file, replace = true, storedPlaylist = folder.isStoredPlaylist)
                                             snackbarMessage = "Replaced playlist"
                                         } catch (e: Exception) {
                                             snackbarMessage = "Failed: ${e.message}"
                                         } finally {
-                                            isAdding = false
+                                            addingFile = null
                                         }
                                     }
                                     selectedForDialog = null
@@ -501,7 +510,7 @@ fun NetworkSharesScreen(viewModel: PlayerViewModel, onBack: () -> Unit) {
                 }
             }
 
-            if (isAdding) {
+            if (addingFile != null || isBusy) {
                 Surface(
                     color = MaterialTheme.colorScheme.surface.copy(alpha = 0.85f),
                     shape = RoundedCornerShape(16.dp),

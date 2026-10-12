@@ -1,5 +1,6 @@
 package com.antoxa78.bitperfectremote.ui.screens
 
+import android.os.SystemClock
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -9,6 +10,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -23,6 +25,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -42,7 +46,13 @@ import com.antoxa78.bitperfectremote.ui.PlayerViewModel
 import com.antoxa78.bitperfectremote.ui.accentColorPalette
 import com.antoxa78.bitperfectremote.ui.luminance
 import com.antoxa78.bitperfectremote.ui.onSurfaceAccentColor
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+
+// Connection status dot colors. Fixed (not accent-derived) so the meaning stays
+// the same with every accent color and in both light and dark themes.
+private val StatusConnected = Color(0xFF22C55E)
+private val StatusConnecting = Color(0xFFF59E0B)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -58,6 +68,8 @@ fun MainRemoteScreen(
     val currentSong by viewModel.currentSong.collectAsState()
     val playlist by viewModel.playlist.collectAsState()
     val errorMessage by viewModel.errorMessage.collectAsState()
+    val isConnected by viewModel.isConnected.collectAsState()
+    val isConnecting by viewModel.isConnecting.collectAsState()
     var themeMode by remember { mutableStateOf(viewModel.themeMode) }
     var themeExpanded by remember { mutableStateOf(false) }
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
@@ -272,13 +284,44 @@ fun MainRemoteScreen(
                                     color = MaterialTheme.colorScheme.surfaceVariant,
                                     modifier = Modifier.padding(horizontal = 4.dp)
                                 ) {
-                                    Text(
-                                        text = viewModel.serverLabel,
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        textAlign = TextAlign.Center,
-                                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 5.dp)
-                                    )
+                                    // Status dot: green = connected, amber = connecting or
+                                    // reconnecting, red = disconnected/failed.
+                                    val isReconnecting = !isConnected &&
+                                        (isConnecting || errorMessage?.contains("Reconnecting", ignoreCase = true) == true)
+                                    val statusColor = when {
+                                        isConnected -> StatusConnected
+                                        isReconnecting -> StatusConnecting
+                                        else -> MaterialTheme.colorScheme.error
+                                    }
+                                    val statusText = when {
+                                        isConnected -> "Connected"
+                                        isReconnecting -> "Connecting"
+                                        else -> "Disconnected"
+                                    }
+                                    Row(
+                                        modifier = Modifier
+                                            .padding(horizontal = 12.dp, vertical = 5.dp)
+                                            .semantics(mergeDescendants = true) {
+                                                contentDescription = "${viewModel.serverLabel}, $statusText"
+                                            },
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Box(
+                                            modifier = Modifier
+                                                .size(7.dp)
+                                                .clip(CircleShape)
+                                                .background(statusColor)
+                                        )
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text(
+                                            text = viewModel.serverLabel,
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            textAlign = TextAlign.Center,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -393,6 +436,7 @@ fun MainRemoteScreen(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun NowPlayingTab(viewModel: PlayerViewModel, status: PlayerStatus, song: TrackInfo) {
     val coverArt by viewModel.coverArt.collectAsState()
@@ -415,7 +459,7 @@ fun NowPlayingTab(viewModel: PlayerViewModel, status: PlayerStatus, song: TrackI
                 modifier = Modifier.weight(1f).fillMaxWidth(),
                 contentAlignment = Alignment.Center
             ) {
-                val artSize = (maxWidth * 0.58f).coerceAtMost(maxHeight)
+                val artSize = (maxWidth * 0.82f).coerceAtMost(maxHeight)
                 Card(
                     modifier = Modifier
                         .size(artSize)
@@ -514,20 +558,70 @@ fun NowPlayingTab(viewModel: PlayerViewModel, status: PlayerStatus, song: TrackI
         // Progress
         Column(modifier = Modifier.fillMaxWidth()) {
             val isRadio = song.file.startsWith("http://") || song.file.startsWith("https://")
-            val progress = if (song.duration > 0f) (status.elapsed / song.duration).coerceIn(0f, 1f) else 0f
+            val duration = if (song.duration > 0f) song.duration else status.duration
+            val isPlaying = status.state == "play"
+
+            // The server is polled every 2s. Between polls, advance the elapsed time
+            // locally so the clock and seek bar move smoothly instead of in 2s jumps.
+            // The anchor resets whenever a fresh poll result (or a play/pause/track
+            // change) arrives, so any drift is corrected on the next poll.
+            val anchorTime = remember(status.elapsed, status.state, song.file) {
+                SystemClock.elapsedRealtime()
+            }
+            var clock by remember { mutableLongStateOf(SystemClock.elapsedRealtime()) }
+            LaunchedEffect(isPlaying) {
+                while (isPlaying) {
+                    clock = SystemClock.elapsedRealtime()
+                    delay(500)
+                }
+            }
+            val liveElapsed = if (isPlaying) {
+                // Cap the extrapolation so a stalled poll can't run the clock away.
+                status.elapsed + ((clock - anchorTime).coerceAtLeast(0L) / 1000f).coerceAtMost(4f)
+            } else {
+                status.elapsed
+            }
+
+            // While dragging, the thumb follows the finger and nothing is sent. A single
+            // seek is issued on release; the target is held until the next poll reports
+            // the new position so the thumb doesn't snap back in between.
+            var seekDrag by remember { mutableStateOf<Float?>(null) }
+            var seekTarget by remember(song.file) { mutableStateOf<Float?>(null) }
+            LaunchedEffect(status.elapsed) { if (seekDrag == null) seekTarget = null }
+            LaunchedEffect(seekTarget) {
+                if (seekTarget != null) {
+                    delay(3000)
+                    seekTarget = null
+                }
+            }
+
+            val shownElapsed = (seekDrag?.let { it * duration } ?: seekTarget ?: liveElapsed)
+                .let { if (duration > 0f) it.coerceIn(0f, duration) else it.coerceAtLeast(0f) }
+            val progress = if (duration > 0f) (shownElapsed / duration).coerceIn(0f, 1f) else 0f
+
             Slider(
                 value = progress,
-                onValueChange = { newVal ->
-                    viewModel.seek(newVal * song.duration)
+                onValueChange = { newVal -> seekDrag = newVal },
+                onValueChangeFinished = {
+                    seekDrag?.let { fraction ->
+                        val target = fraction * duration
+                        seekTarget = target
+                        viewModel.seek(target)
+                    }
+                    seekDrag = null
                 },
-                enabled = song.duration > 0f,
+                enabled = duration > 0f && !isRadio,
                 modifier = Modifier.fillMaxWidth()
             )
             Row(
                 modifier = Modifier.fillMaxWidth().padding(start = 4.dp, end = 4.dp, top = 4.dp),
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                Text(formatTime(status.elapsed), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(
+                    formatTime(shownElapsed),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = if (seekDrag != null) onSurfaceAccentColor() else MaterialTheme.colorScheme.onSurfaceVariant
+                )
                 if (isRadio) {
                     Text(
                         text = "\u221E",
@@ -538,7 +632,7 @@ fun NowPlayingTab(viewModel: PlayerViewModel, status: PlayerStatus, song: TrackI
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 } else {
-                    Text(formatTime(song.duration), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(formatTime(duration), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
         }
@@ -549,31 +643,65 @@ fun NowPlayingTab(viewModel: PlayerViewModel, status: PlayerStatus, song: TrackI
             horizontalArrangement = Arrangement.SpaceEvenly,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            IconButton(onClick = { viewModel.toggleRepeat() }) {
+            // A filled background marks an active mode, so it reads as "on" at a
+            // glance instead of relying on a subtle tint change alone.
+            val toggleColors = IconButtonDefaults.filledTonalIconToggleButtonColors(
+                containerColor = Color.Transparent,
+                contentColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                checkedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                checkedContentColor = onSurfaceAccentColor()
+            )
+            FilledTonalIconToggleButton(
+                checked = status.repeat,
+                onCheckedChange = { viewModel.toggleRepeat() },
+                colors = toggleColors
+            ) {
                 Icon(
                     imageVector = Icons.Default.Repeat,
-                    contentDescription = "Repeat",
-                    tint = if (status.repeat) onSurfaceAccentColor() else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                    contentDescription = if (status.repeat) "Repeat on" else "Repeat off"
                 )
             }
-            IconButton(onClick = { viewModel.toggleShuffle() }) {
+            FilledTonalIconToggleButton(
+                checked = status.random,
+                onCheckedChange = { viewModel.toggleShuffle() },
+                colors = toggleColors
+            ) {
                 Icon(
                     imageVector = Icons.Default.Shuffle,
-                    contentDescription = "Shuffle",
-                    tint = if (status.random) onSurfaceAccentColor() else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                    contentDescription = if (status.random) "Shuffle on" else "Shuffle off"
                 )
             }
         }
 
         // Volume
+        // The slider follows the finger locally (so the 2s poll can't yank the thumb
+        // back mid-drag). Changes are sent once the finger pauses briefly and again on
+        // release, instead of one command per drag tick. After release the dragged
+        // value is held until the server reports it, so the thumb doesn't flicker.
+        var volumeDragging by remember { mutableStateOf(false) }
+        var volumeOverride by remember { mutableStateOf<Int?>(null) }
+        LaunchedEffect(volumeOverride, volumeDragging) {
+            val target = volumeOverride ?: return@LaunchedEffect
+            if (volumeDragging) {
+                delay(150)
+                viewModel.setVolume(target)
+            } else {
+                delay(3000)
+                volumeOverride = null
+            }
+        }
+        LaunchedEffect(status.volume) {
+            if (!volumeDragging && volumeOverride == status.volume) volumeOverride = null
+        }
+        val shownVolume = volumeOverride ?: status.volume
         Row(
             modifier = Modifier.fillMaxWidth().padding(bottom = 4.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Icon(
                 imageVector = when {
-                    status.volume <= 0 -> Icons.Default.VolumeOff
-                    status.volume < 50 -> Icons.Default.VolumeDown
+                    shownVolume <= 0 -> Icons.Default.VolumeOff
+                    shownVolume < 50 -> Icons.Default.VolumeDown
                     else -> Icons.Default.VolumeUp
                 },
                 contentDescription = "Volume",
@@ -581,14 +709,19 @@ fun NowPlayingTab(viewModel: PlayerViewModel, status: PlayerStatus, song: TrackI
                 modifier = Modifier.size(20.dp)
             )
             Slider(
-                value = (status.volume / 100f).coerceIn(0f, 1f),
+                value = (shownVolume / 100f).coerceIn(0f, 1f),
                 onValueChange = { newValue ->
-                    viewModel.setVolume((newValue * 100).roundToInt().coerceIn(0, 100))
+                    volumeDragging = true
+                    volumeOverride = (newValue * 100).roundToInt().coerceIn(0, 100)
+                },
+                onValueChangeFinished = {
+                    volumeDragging = false
+                    volumeOverride?.let { viewModel.setVolume(it) }
                 },
                 modifier = Modifier.weight(1f).padding(horizontal = 8.dp)
             )
             Text(
-                text = "${status.volume}%",
+                text = "$shownVolume%",
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.widthIn(min = 36.dp),
@@ -645,18 +778,54 @@ fun QueueTab(viewModel: PlayerViewModel, playlist: List<QueueItem>, currentSongI
             }
         }
     } else {
+        val currentIndex = playlist.indexOfFirst { it.id.toIntOrNull() == currentSongId }
+
+        // The queue opens already positioned on the playing track. List index 0 is
+        // the header, so `currentIndex` leaves the previous track visible above the
+        // current one for context.
+        val listState = rememberLazyListState(initialFirstVisibleItemIndex = currentIndex.coerceAtLeast(0))
+
+        // Follow the playing track when it changes (keyed on the song, not its index,
+        // so removing an earlier entry doesn't move the list). Skipped while the user
+        // is scrolling so it never fights a manual scroll.
+        var followedSongId by remember { mutableIntStateOf(currentSongId) }
+        LaunchedEffect(currentSongId) {
+            if (currentSongId == followedSongId) return@LaunchedEffect
+            followedSongId = currentSongId
+            if (currentIndex >= 0 && !listState.isScrollInProgress) {
+                listState.animateScrollToItem(currentIndex)
+            }
+        }
+
         LazyColumn(
+            state = listState,
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             item {
-                Text(
-                    text = "UP NEXT",
-                    style = MaterialTheme.typography.labelLarge.copy(letterSpacing = 1.sp),
-                    color = onSurfaceAccentColor(),
-                    modifier = Modifier.padding(bottom = 8.dp, start = 4.dp)
-                )
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 8.dp, start = 4.dp, end = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "UP NEXT",
+                        style = MaterialTheme.typography.labelLarge.copy(letterSpacing = 1.sp),
+                        color = onSurfaceAccentColor(),
+                        modifier = Modifier.weight(1f)
+                    )
+                    Text(
+                        text = when {
+                            currentIndex >= 0 -> "${currentIndex + 1} of ${playlist.size}"
+                            playlist.size == 1 -> "1 track"
+                            else -> "${playlist.size} tracks"
+                        },
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
             }
 
             itemsIndexed(playlist) { index, item ->

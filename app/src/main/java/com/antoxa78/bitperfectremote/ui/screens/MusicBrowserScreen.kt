@@ -9,6 +9,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -96,21 +97,29 @@ fun MusicBrowserScreen(viewModel: PlayerViewModel, onBack: () -> Unit) {
     // Applies the [Replace All] / [Add To Playlist] bottom-bar actions to the
     // currently viewed folder. The library root has no folder to queue, so we
     // guide the user to open one first.
+    // Runs a queue command on the library connection while showing the busy bar,
+    // then reports the outcome in the snackbar.
+    fun runQueueAction(success: String, failurePrefix: String = "Failed", action: suspend () -> Unit) {
+        scope.launch {
+            isBusy = true
+            try {
+                action()
+                snackbarMessage = success
+            } catch (e: Exception) {
+                snackbarMessage = "$failurePrefix: ${e.message}"
+            } finally {
+                isBusy = false
+            }
+        }
+    }
+
     fun queueCurrentFolder(replace: Boolean) {
         if (currentPath.isEmpty()) {
             snackbarMessage = "Open a folder first"
             return
         }
-        scope.launch {
-            isBusy = true
-            try {
-                libraryClient.loadFolderToQueue(currentPath, replace)
-                snackbarMessage = if (replace) "Replaced playlist" else "Added to playlist"
-            } catch (e: Exception) {
-                snackbarMessage = "Failed: ${e.message}"
-            } finally {
-                isBusy = false
-            }
+        runQueueAction(if (replace) "Replaced playlist" else "Added to playlist") {
+            libraryClient.loadFolderToQueue(currentPath, replace)
         }
     }
 
@@ -186,7 +195,14 @@ fun MusicBrowserScreen(viewModel: PlayerViewModel, onBack: () -> Unit) {
                 },
                 navigationIcon = {
                     IconButton(onClick = { navigateUp() }) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Back")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                    }
+                },
+                actions = {
+                    if (isConnected) {
+                        IconButton(onClick = { reloadTick++ }, enabled = !isLoading) {
+                            Icon(Icons.Default.Refresh, contentDescription = "Refresh")
+                        }
                     }
                 }
             )
@@ -221,9 +237,11 @@ fun MusicBrowserScreen(viewModel: PlayerViewModel, onBack: () -> Unit) {
                         ) {
                             ActionBarButtonLabel("Player")
                         }
+                        // The library root has no folder to queue, so both queue
+                        // actions are disabled there rather than failing on tap.
                         FilledTonalButton(
                             onClick = { queueCurrentFolder(replace = true) },
-                            enabled = !isBusy,
+                            enabled = !isBusy && currentPath.isNotEmpty(),
                             contentPadding = ActionBarButtonPadding,
                             modifier = Modifier
                                 .weight(1f)
@@ -233,7 +251,7 @@ fun MusicBrowserScreen(viewModel: PlayerViewModel, onBack: () -> Unit) {
                         }
                         Button(
                             onClick = { queueCurrentFolder(replace = false) },
-                            enabled = !isBusy,
+                            enabled = !isBusy && currentPath.isNotEmpty(),
                             contentPadding = ActionBarButtonPadding,
                             modifier = Modifier
                                 .weight(1f)
@@ -353,13 +371,8 @@ fun MusicBrowserScreen(viewModel: PlayerViewModel, onBack: () -> Unit) {
                                 trailingContent = {
                                     if (!entry.isDirectory) {
                                         IconButton(onClick = {
-                                            scope.launch {
-                                                try {
-                                                    libraryClient.addUri(entry.file, entry.isStoredPlaylist)
-                                                    snackbarMessage = "Added to queue"
-                                                } catch (e: Exception) {
-                                                    snackbarMessage = "Add failed: ${e.message}"
-                                                }
+                                            runQueueAction("Added to queue", failurePrefix = "Add failed") {
+                                                libraryClient.addUri(entry.file, entry.isStoredPlaylist)
                                             }
                                         }) {
                                             Icon(Icons.Default.Add, contentDescription = "Add to Queue")
@@ -374,13 +387,8 @@ fun MusicBrowserScreen(viewModel: PlayerViewModel, onBack: () -> Unit) {
                                             openFolder(entry.file)
                                         } else {
                                             // Default: replace the playlist and play the selected file.
-                                            scope.launch {
-                                                try {
-                                                    libraryClient.loadFolderToQueue(entry.file, replace = true, storedPlaylist = entry.isStoredPlaylist)
-                                                    snackbarMessage = "Playing ${entry.title}"
-                                                } catch (e: Exception) {
-                                                    snackbarMessage = "Failed: ${e.message}"
-                                                }
+                                            runQueueAction("Playing ${entry.title}") {
+                                                libraryClient.loadFolderToQueue(entry.file, replace = true, storedPlaylist = entry.isStoredPlaylist)
                                             }
                                         }
                                     },
@@ -440,13 +448,8 @@ fun MusicBrowserScreen(viewModel: PlayerViewModel, onBack: () -> Unit) {
                         ) {
                             Button(
                                 onClick = {
-                                    scope.launch {
-                                        try {
-                                            libraryClient.loadFolderToQueue(folder.file, replace = false, storedPlaylist = folder.isStoredPlaylist)
-                                            snackbarMessage = "Added folder to playlist"
-                                        } catch (e: Exception) {
-                                            snackbarMessage = "Failed: ${e.message}"
-                                        }
+                                    runQueueAction("Added folder to playlist") {
+                                        libraryClient.loadFolderToQueue(folder.file, replace = false, storedPlaylist = folder.isStoredPlaylist)
                                     }
                                     selectedFolderForDialog = null
                                 },
@@ -460,13 +463,8 @@ fun MusicBrowserScreen(viewModel: PlayerViewModel, onBack: () -> Unit) {
 
                             FilledTonalButton(
                                 onClick = {
-                                    scope.launch {
-                                        try {
-                                            libraryClient.loadFolderToQueue(folder.file, replace = true, storedPlaylist = folder.isStoredPlaylist)
-                                            snackbarMessage = "Replaced playlist with folder"
-                                        } catch (e: Exception) {
-                                            snackbarMessage = "Failed: ${e.message}"
-                                        }
+                                    runQueueAction("Replaced playlist with folder") {
+                                        libraryClient.loadFolderToQueue(folder.file, replace = true, storedPlaylist = folder.isStoredPlaylist)
                                     }
                                     selectedFolderForDialog = null
                                 },
@@ -486,6 +484,15 @@ fun MusicBrowserScreen(viewModel: PlayerViewModel, onBack: () -> Unit) {
                             }
                         }
                     }
+                )
+            }
+
+            // Thin progress bar under the top bar while a queue command is running,
+            // so a tap on a track or folder gives immediate feedback.
+            if (isBusy) {
+                LinearProgressIndicator(
+                    modifier = Modifier.fillMaxWidth().align(Alignment.TopCenter),
+                    color = onSurfaceAccentColor()
                 )
             }
 

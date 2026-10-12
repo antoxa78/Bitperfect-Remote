@@ -4,6 +4,7 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -17,16 +18,21 @@ import androidx.compose.material.icons.filled.Router
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material.icons.filled.Tag
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import com.antoxa78.bitperfectremote.ui.MpdServer
 import com.antoxa78.bitperfectremote.ui.PlayerViewModel
 import com.antoxa78.bitperfectremote.ui.onSurfaceAccentColor
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -41,11 +47,16 @@ fun SettingsScreen(viewModel: PlayerViewModel, onBack: () -> Unit) {
     // Track whether the user has pressed Save so we don't react to the initial
     // auto-connect that happens before the screen was even opened.
     var connectRequested by remember { mutableStateOf(false) }
+    var passwordVisible by remember { mutableStateOf(false) }
+    // Server awaiting delete confirmation, if any.
+    var pendingDelete by remember { mutableStateOf<MpdServer?>(null) }
 
     val isConnected by viewModel.isConnected.collectAsState()
     val isConnecting by viewModel.isConnecting.collectAsState()
     val activeKey by viewModel.activeServerKey.collectAsState()
     val servers = viewModel.servers
+    val scrollState = rememberScrollState()
+    val scope = rememberCoroutineScope()
 
     // Show "saved" only once the connection actually succeeds, not immediately on click.
     LaunchedEffect(isConnected) {
@@ -56,6 +67,32 @@ fun SettingsScreen(viewModel: PlayerViewModel, onBack: () -> Unit) {
     }
 
     BackHandler { onBack() }
+
+    fun clearForm() {
+        editingKey = null
+        serverName = ""
+        ipAddress = ""
+        port = "6600"
+        password = ""
+        passwordVisible = false
+    }
+
+    fun saveAndConnect() {
+        savedMessage = null
+        if (ipAddress.trim().isBlank()) {
+            savedMessage = "Please enter a Player IP Address"
+            return
+        }
+        val p = port.toIntOrNull() ?: 6600
+        if (editingKey != null) {
+            viewModel.updateServer(editingKey!!, serverName, ipAddress, port, password)
+            editingKey = null
+        } else {
+            viewModel.addServer(serverName, ipAddress, port, password)
+        }
+        connectRequested = true
+        viewModel.connect(ipAddress.trim(), p, password, true, serverName.trim())
+    }
 
     Scaffold(
         topBar = {
@@ -73,7 +110,7 @@ fun SettingsScreen(viewModel: PlayerViewModel, onBack: () -> Unit) {
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
-                .verticalScroll(rememberScrollState())
+                .verticalScroll(scrollState)
                 .padding(24.dp),
             verticalArrangement = Arrangement.Top,
             horizontalAlignment = Alignment.CenterHorizontally
@@ -93,7 +130,8 @@ fun SettingsScreen(viewModel: PlayerViewModel, onBack: () -> Unit) {
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(12.dp),
-                leadingIcon = { Icon(Icons.Default.Storage, contentDescription = null) }
+                leadingIcon = { Icon(Icons.Default.Storage, contentDescription = null) },
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next)
             )
 
             Spacer(modifier = Modifier.height(12.dp))
@@ -106,20 +144,20 @@ fun SettingsScreen(viewModel: PlayerViewModel, onBack: () -> Unit) {
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(12.dp),
                 leadingIcon = { Icon(Icons.Default.Dns, contentDescription = null) },
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri)
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri, imeAction = ImeAction.Next)
             )
 
             Spacer(modifier = Modifier.height(12.dp))
 
             OutlinedTextField(
                 value = port,
-                onValueChange = { port = it; savedMessage = null },
+                onValueChange = { port = it.filter(Char::isDigit).take(5); savedMessage = null },
                 label = { Text("MPD Port") },
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(12.dp),
                 leadingIcon = { Icon(Icons.Default.Tag, contentDescription = null) },
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Next)
             )
 
             Spacer(modifier = Modifier.height(12.dp))
@@ -132,8 +170,17 @@ fun SettingsScreen(viewModel: PlayerViewModel, onBack: () -> Unit) {
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(12.dp),
                 leadingIcon = { Icon(Icons.Default.Lock, contentDescription = null) },
-                visualTransformation = PasswordVisualTransformation(),
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password)
+                trailingIcon = {
+                    IconButton(onClick = { passwordVisible = !passwordVisible }) {
+                        Icon(
+                            imageVector = if (passwordVisible) Icons.Default.Visibility else Icons.Default.VisibilityOff,
+                            contentDescription = if (passwordVisible) "Hide password" else "Show password"
+                        )
+                    }
+                },
+                visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = ImeAction.Go),
+                keyboardActions = KeyboardActions(onGo = { if (!isConnecting) saveAndConnect() })
             )
 
             if (savedMessage != null) {
@@ -148,22 +195,7 @@ fun SettingsScreen(viewModel: PlayerViewModel, onBack: () -> Unit) {
             Spacer(modifier = Modifier.height(24.dp))
 
             Button(
-                onClick = {
-                    savedMessage = null
-                    if (ipAddress.trim().isBlank()) {
-                        savedMessage = "Please enter a Player IP Address"
-                        return@Button
-                    }
-                    val p = port.toIntOrNull() ?: 6600
-                    if (editingKey != null) {
-                        viewModel.updateServer(editingKey!!, serverName, ipAddress, port, password)
-                        editingKey = null
-                    } else {
-                        viewModel.addServer(serverName, ipAddress, port, password)
-                    }
-                    connectRequested = true
-                    viewModel.connect(ipAddress.trim(), p, password, true, serverName.trim())
-                },
+                onClick = { saveAndConnect() },
                 enabled = !isConnecting,
                 modifier = Modifier.fillMaxWidth().height(50.dp),
                 shape = RoundedCornerShape(16.dp)
@@ -178,6 +210,20 @@ fun SettingsScreen(viewModel: PlayerViewModel, onBack: () -> Unit) {
                     Icon(Icons.Default.Save, contentDescription = null)
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(if (editingKey != null) "Save Changes & Connect" else "Save & Connect")
+                }
+            }
+
+            // While editing, offer a way out that restores the blank "Add" form.
+            if (editingKey != null) {
+                Spacer(modifier = Modifier.height(8.dp))
+                TextButton(
+                    onClick = {
+                        clearForm()
+                        savedMessage = null
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Cancel Editing")
                 }
             }
 
@@ -208,23 +254,49 @@ fun SettingsScreen(viewModel: PlayerViewModel, onBack: () -> Unit) {
                             ipAddress = server.ip
                             port = server.port
                             password = server.password
+                            passwordVisible = false
                             savedMessage = null
+                            // The form sits above the list; bring it into view.
+                            scope.launch { scrollState.animateScrollTo(0) }
                         },
-                        onDelete = {
-                            viewModel.removeServer(server.key)
-                            if (editingKey == server.key) {
-                                editingKey = null
-                                serverName = ""
-                                ipAddress = ""
-                                port = "6600"
-                                password = ""
-                            }
-                        }
+                        onDelete = { pendingDelete = server }
                     )
                     Spacer(modifier = Modifier.height(8.dp))
                 }
             }
         }
+    }
+
+    // Deleting is irreversible (the password is lost with it), so confirm first.
+    pendingDelete?.let { server ->
+        AlertDialog(
+            onDismissRequest = { pendingDelete = null },
+            icon = { Icon(Icons.Default.Delete, contentDescription = null) },
+            title = { Text("Delete server?") },
+            text = {
+                Text(
+                    "\"${server.name.ifBlank { server.ip }}\" (${server.ip}:${server.port}) " +
+                        "will be removed from your saved servers."
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        viewModel.removeServer(server.key)
+                        if (editingKey == server.key) clearForm()
+                        pendingDelete = null
+                    },
+                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
+                ) {
+                    Text("Delete")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingDelete = null }) {
+                    Text("Cancel")
+                }
+            }
+        )
     }
 }
 

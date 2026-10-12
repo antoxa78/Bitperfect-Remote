@@ -3,6 +3,8 @@ package com.antoxa78.bitperfectremote
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.animation.Crossfade
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
@@ -117,50 +119,57 @@ class MainActivity : ComponentActivity() {
                     // If we have a saved IP on first launch, start trying to connect or jump right to player screen
                     val hasSavedServer = viewModel.savedIp.isNotBlank() && viewModel.savedIp != "192.168.1."
 
-                    when (currentScreen) {
-                        "settings" -> {
-                            SettingsScreen(
-                                viewModel = viewModel,
-                                onBack = { currentScreen = "main" }
-                            )
-                        }
-                        "browser" -> {
-                            MusicBrowserScreen(
-                                viewModel = viewModel,
-                                onBack = { currentScreen = "main" }
-                            )
-                        }
-                        "shares" -> {
-                            NetworkSharesScreen(
-                                viewModel = viewModel,
-                                onBack = { currentScreen = "main" }
-                            )
-                        }
-                        "connection" -> {
-                            ConnectionScreen(
-                                viewModel = viewModel,
-                                onConnected = { currentScreen = "main" }
-                            )
-                        }
-                        else -> {
-                            if (isConnected || hasSavedServer) {
-                                MainRemoteScreen(
+                    // Short crossfade between screens instead of a hard cut.
+                    Crossfade(
+                        targetState = currentScreen,
+                        animationSpec = tween(durationMillis = 200),
+                        label = "screen"
+                    ) { screen ->
+                        when (screen) {
+                            "settings" -> {
+                                SettingsScreen(
                                     viewModel = viewModel,
-                                    onDisconnect = {
-                                        currentScreen = "connection"
-                                        viewModel.disconnect()
-                                    },
-                                    onOpenSettings = { currentScreen = "settings" },
-                                    onOpenBrowser = { currentScreen = "browser" },
-                                    onOpenShares = { currentScreen = "shares" }
+                                    onBack = { currentScreen = "main" }
                                 )
-                            } else {
+                            }
+                            "browser" -> {
+                                MusicBrowserScreen(
+                                    viewModel = viewModel,
+                                    onBack = { currentScreen = "main" }
+                                )
+                            }
+                            "shares" -> {
+                                NetworkSharesScreen(
+                                    viewModel = viewModel,
+                                    onBack = { currentScreen = "main" }
+                                )
+                            }
+                            "connection" -> {
                                 ConnectionScreen(
                                     viewModel = viewModel,
-                                    onConnected = {
-                                        currentScreen = "main"
-                                    }
+                                    onConnected = { currentScreen = "main" }
                                 )
+                            }
+                            else -> {
+                                if (isConnected || hasSavedServer) {
+                                    MainRemoteScreen(
+                                        viewModel = viewModel,
+                                        onDisconnect = {
+                                            currentScreen = "connection"
+                                            viewModel.disconnect()
+                                        },
+                                        onOpenSettings = { currentScreen = "settings" },
+                                        onOpenBrowser = { currentScreen = "browser" },
+                                        onOpenShares = { currentScreen = "shares" }
+                                    )
+                                } else {
+                                    ConnectionScreen(
+                                        viewModel = viewModel,
+                                        onConnected = {
+                                            currentScreen = "main"
+                                        }
+                                    )
+                                }
                             }
                         }
                     }

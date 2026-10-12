@@ -4,7 +4,9 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -16,7 +18,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
@@ -43,6 +47,13 @@ fun ConnectionScreen(viewModel: PlayerViewModel, onConnected: () -> Unit) {
         if (isConnected) {
             onConnected()
         }
+    }
+
+    val canConnect = !isConnecting && ipAddress.isNotBlank()
+    fun submit() {
+        if (!canConnect) return
+        val p = port.toIntOrNull() ?: 6600
+        viewModel.connect(ipAddress.trim(), p, password, rememberMe, serverName.trim())
     }
 
     Box(
@@ -118,7 +129,8 @@ fun ConnectionScreen(viewModel: PlayerViewModel, onConnected: () -> Unit) {
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(12.dp),
-                        leadingIcon = { Icon(Icons.Default.Storage, contentDescription = null) }
+                        leadingIcon = { Icon(Icons.Default.Storage, contentDescription = null) },
+                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next)
                     )
 
                     Spacer(modifier = Modifier.height(16.dp))
@@ -132,20 +144,21 @@ fun ConnectionScreen(viewModel: PlayerViewModel, onConnected: () -> Unit) {
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(12.dp),
                         leadingIcon = { Icon(Icons.Default.Dns, contentDescription = null) },
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri)
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri, imeAction = ImeAction.Next)
                     )
 
                     Spacer(modifier = Modifier.height(16.dp))
 
                     OutlinedTextField(
                         value = port,
-                        onValueChange = { port = it },
+                        // Ports are numeric; drop anything else (e.g. pasted spaces).
+                        onValueChange = { port = it.filter(Char::isDigit).take(5) },
                         label = { Text("Port") },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(12.dp),
                         leadingIcon = { Icon(Icons.Default.Tag, contentDescription = null) },
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Next)
                     )
 
                     Spacer(modifier = Modifier.height(16.dp))
@@ -162,23 +175,32 @@ fun ConnectionScreen(viewModel: PlayerViewModel, onConnected: () -> Unit) {
                             IconButton(onClick = { passwordVisible = !passwordVisible }) {
                                 Icon(
                                     imageVector = if (passwordVisible) Icons.Default.Visibility else Icons.Default.VisibilityOff,
-                                    contentDescription = null
+                                    contentDescription = if (passwordVisible) "Hide password" else "Show password"
                                 )
                             }
                         },
                         visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password)
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = ImeAction.Go),
+                        keyboardActions = KeyboardActions(onGo = { submit() })
                     )
 
                     Spacer(modifier = Modifier.height(16.dp))
 
+                    // The whole row toggles the checkbox, not just the small box.
                     Row(
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(8.dp))
+                            .toggleable(
+                                value = rememberMe,
+                                onValueChange = { rememberMe = it },
+                                role = Role.Checkbox
+                            ),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Checkbox(
                             checked = rememberMe,
-                            onCheckedChange = { rememberMe = it }
+                            onCheckedChange = null
                         )
                         Text(
                             text = "Save connection details",
@@ -189,11 +211,8 @@ fun ConnectionScreen(viewModel: PlayerViewModel, onConnected: () -> Unit) {
                     Spacer(modifier = Modifier.height(24.dp))
 
                     Button(
-                        onClick = {
-                            val p = port.toIntOrNull() ?: 6600
-                            viewModel.connect(ipAddress.trim(), p, password, rememberMe, serverName.trim())
-                        },
-                        enabled = !isConnecting && ipAddress.isNotBlank(),
+                        onClick = { submit() },
+                        enabled = canConnect,
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(56.dp),
