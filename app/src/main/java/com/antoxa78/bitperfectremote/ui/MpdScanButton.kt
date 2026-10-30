@@ -29,6 +29,9 @@ fun MpdScanButton(
     OutlinedButton(
         onClick = { showDialog = true },
         modifier = modifier,
+        colors = ButtonDefaults.outlinedButtonColors(
+            contentColor = onSurfaceAccentColor()
+        ),
         contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
         shape = RoundedCornerShape(12.dp)
     ) {
@@ -75,7 +78,13 @@ private fun MpdDiscoveryDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        icon = { Icon(Icons.Default.WifiFind, contentDescription = null) },
+        icon = {
+            Icon(
+                Icons.Default.WifiFind,
+                contentDescription = null,
+                tint = onSurfaceAccentColor()
+            )
+        },
         title = { Text("Find MPD Server") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -83,7 +92,8 @@ private fun MpdDiscoveryDialog(
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         CircularProgressIndicator(
                             modifier = Modifier.size(18.dp),
-                            strokeWidth = 2.dp
+                            strokeWidth = 2.dp,
+                            color = onSurfaceAccentColor()
                         )
                         Spacer(modifier = Modifier.width(10.dp))
                         Text(
@@ -136,13 +146,21 @@ private fun MpdDiscoveryDialog(
         confirmButton = {
             TextButton(
                 onClick = { scanAttempt++ },
-                enabled = !scanning
+                enabled = !scanning,
+                colors = ButtonDefaults.textButtonColors(
+                    contentColor = onSurfaceAccentColor()
+                )
             ) {
                 Text("Scan again")
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) {
+            TextButton(
+                onClick = onDismiss,
+                colors = ButtonDefaults.textButtonColors(
+                    contentColor = onSurfaceAccentColor()
+                )
+            ) {
                 Text("Cancel")
             }
         }
