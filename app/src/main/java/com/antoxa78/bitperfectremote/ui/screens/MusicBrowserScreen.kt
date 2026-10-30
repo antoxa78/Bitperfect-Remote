@@ -24,6 +24,7 @@ import com.antoxa78.bitperfectremote.ui.ActionBarButtonHeight
 import com.antoxa78.bitperfectremote.ui.ActionBarButtonLabel
 import com.antoxa78.bitperfectremote.ui.ActionBarButtonPadding
 import com.antoxa78.bitperfectremote.ui.PlayerViewModel
+import com.antoxa78.bitperfectremote.ui.browseEntryIcon
 import com.antoxa78.bitperfectremote.ui.onSurfaceAccentColor
 import com.antoxa78.bitperfectremote.ui.smbLabel
 import kotlinx.coroutines.delay
@@ -359,11 +360,7 @@ fun MusicBrowserScreen(viewModel: PlayerViewModel, onBack: () -> Unit) {
                                 },
                                 leadingContent = {
                                     Icon(
-                                        imageVector = when {
-                                            !entry.isDirectory -> Icons.Default.Audiotrack
-                                            entry.file.contains("://") -> Icons.Filled.Storage
-                                            else -> Icons.Default.Folder
-                                        },
+                                        imageVector = browseEntryIcon(entry),
                                         contentDescription = null,
                                         tint = if (entry.isDirectory) onSurfaceAccentColor() else MaterialTheme.colorScheme.onSurfaceVariant
                                     )

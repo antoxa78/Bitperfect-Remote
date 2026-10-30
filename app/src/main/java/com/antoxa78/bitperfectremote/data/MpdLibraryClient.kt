@@ -18,15 +18,6 @@ class MpdLibraryClient(private val client: MpdClient) {
         return if (trimmed.startsWith("/")) trimmed else "/$trimmed"
     }
 
-    // Playlist/cue documents (*.m3u, *.m3u8, *.pls, *.cue) are not directly playable
-    // audio: their contents have to be expanded into the queue with the "load" command.
-    private fun isPlaylistFile(path: String): Boolean {
-        val lower = path.lowercase()
-        return lower.endsWith(".m3u") || lower.endsWith(".m3u8") || lower.endsWith(".pls") || lower.endsWith(".cue")
-    }
-
-    private fun isCueSheet(path: String): Boolean = path.lowercase().endsWith(".cue")
-
     // "load" is the only command that expands a playlist into queue entries, but MPD can
     // only do so for playlists it is able to open. Names in the playlist directory always
     // work, and since the playlist plugins of MPD 0.24 so do paths in the music directory.
@@ -125,7 +116,7 @@ class MpdLibraryClient(private val client: MpdClient) {
         var currFile = ""
         var isDirectory = false
         fun flush() {
-            if (currFile.isNotEmpty() && !isDirectory && isCueSheet(currFile)) {
+            if (currFile.isNotEmpty() && !isDirectory && isCueSheetPath(currFile)) {
                 cueSheets.add(
                     BrowseEntry(
                         currFile,
@@ -170,7 +161,7 @@ class MpdLibraryClient(private val client: MpdClient) {
     suspend fun addUri(uri: String, storedPlaylist: Boolean = false) = withContext(Dispatchers.IO) {
         when {
             storedPlaylist -> loadPlaylist(uri)
-            isPlaylistFile(uri) -> loadPlaylist(toAbsolutePath(uri))
+            isPlaylistFilePath(uri) -> loadPlaylist(toAbsolutePath(uri))
             else -> client.sendCommand("add \"${toAbsolutePath(uri)}\"")
         }
     }

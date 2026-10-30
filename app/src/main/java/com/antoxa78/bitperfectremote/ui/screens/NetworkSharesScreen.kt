@@ -24,6 +24,7 @@ import com.antoxa78.bitperfectremote.ui.ActionBarButtonHeight
 import com.antoxa78.bitperfectremote.ui.ActionBarButtonLabel
 import com.antoxa78.bitperfectremote.ui.ActionBarButtonPadding
 import com.antoxa78.bitperfectremote.ui.PlayerViewModel
+import com.antoxa78.bitperfectremote.ui.browseEntryIcon
 import com.antoxa78.bitperfectremote.ui.onSurfaceAccentColor
 import com.antoxa78.bitperfectremote.ui.smbHost
 import com.antoxa78.bitperfectremote.ui.smbLabel
@@ -340,7 +341,7 @@ fun NetworkSharesScreen(viewModel: PlayerViewModel, onBack: () -> Unit) {
                                 },
                                 leadingContent = {
                                     Icon(
-                                        imageVector = if (entry.isDirectory) Icons.Default.Folder else Icons.Default.Audiotrack,
+                                        imageVector = browseEntryIcon(entry),
                                         contentDescription = null,
                                         tint = if (entry.isDirectory) onSurfaceAccentColor() else MaterialTheme.colorScheme.onSurfaceVariant
                                     )
