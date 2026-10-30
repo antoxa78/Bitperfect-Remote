@@ -28,6 +28,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.antoxa78.bitperfectremote.R
+import com.antoxa78.bitperfectremote.ui.MpdScanButton
 import com.antoxa78.bitperfectremote.ui.PlayerViewModel
 
 @Composable
@@ -159,6 +160,19 @@ fun ConnectionScreen(viewModel: PlayerViewModel, onConnected: () -> Unit) {
                         shape = RoundedCornerShape(12.dp),
                         leadingIcon = { Icon(Icons.Default.Tag, contentDescription = null) },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Next)
+                    )
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    MpdScanButton(
+                        onServerSelected = { server ->
+                            ipAddress = server.host
+                            port = server.port.toString()
+                            if (server.name.isNotBlank() && serverName.isBlank()) {
+                                serverName = server.name
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth()
                     )
 
                     Spacer(modifier = Modifier.height(16.dp))

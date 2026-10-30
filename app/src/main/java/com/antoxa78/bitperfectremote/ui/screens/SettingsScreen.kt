@@ -29,6 +29,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
+import com.antoxa78.bitperfectremote.ui.MpdScanButton
 import com.antoxa78.bitperfectremote.ui.MpdServer
 import com.antoxa78.bitperfectremote.ui.PlayerViewModel
 import com.antoxa78.bitperfectremote.ui.onSurfaceAccentColor
@@ -158,6 +159,20 @@ fun SettingsScreen(viewModel: PlayerViewModel, onBack: () -> Unit) {
                 shape = RoundedCornerShape(12.dp),
                 leadingIcon = { Icon(Icons.Default.Tag, contentDescription = null) },
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Next)
+            )
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            MpdScanButton(
+                onServerSelected = { server ->
+                    ipAddress = server.host
+                    port = server.port.toString()
+                    if (server.name.isNotBlank() && serverName.isBlank()) {
+                        serverName = server.name
+                    }
+                    savedMessage = null
+                },
+                modifier = Modifier.fillMaxWidth()
             )
 
             Spacer(modifier = Modifier.height(12.dp))
